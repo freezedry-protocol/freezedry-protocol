@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Freeze Dry — Marketplace Inscription Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.5; }
+    .mode-toggle { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .mode-toggle button { flex: 1; padding: 0.75rem; background: #141414; border: 1px solid #2a2a2a; border-radius: 6px; color: #aaa; cursor: pointer; font-size: 0.85rem; }
+    .mode-toggle button.active { border-color: #4a9eff; color: #fff; background: #1a2a3a; }
+    .mode-toggle button:hover:not(.active) { border-color: #444; }
+    .step { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .step h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #aaa; }
+    .step.active { border-color: #4a9eff; }
+    .step.done { border-color: #2ea043; }
+    label { display: block; font-size: 0.85rem; color: #999; margin-bottom: 0.4rem; }
+    input[type="text"], input[type="file"], select { width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 0.75rem; }
+    button { padding: 0.6rem 1.2rem; background: #4a9eff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #3a8eef; }
+    button.secondary { background: #2a2a2a; color: #ccc; }
+    button.secondary:hover:not(:disabled) { background: #333; }
+    .stats { font-size: 0.8rem; color: #888; margin-top: 0.5rem; line-height: 1.7; }
+    .stats span { color: #ccc; }
+    .progress { margin-top: 0.5rem; font-size: 0.85rem; color: #4a9eff; min-height: 1.2em; }
+    #error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
+    .preview { max-width: 300px; max-height: 300px; border-radius: 4px; margin-top: 0.75rem; }
+    .fee-breakdown { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 1rem; margin-top: 0.75rem; }
+    .fee-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.85rem; }
+    .fee-row .label { color: #888; }
+    .fee-row .value { color: #ccc; }
+    .fee-row.total { border-top: 1px solid #333; margin-top: 0.3rem; padding-top: 0.5rem; font-weight: 600; }
+    .fee-row.total .value { color: #4a9eff; }
+    a { color: #4a9eff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .hidden { display: none; }
+    code { background: #1a1a1a; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+    .info-box { background: #1a2a1a; border: 1px solid #2ea043; border-radius: 6px; padding: 1rem; margin-top: 0.75rem; font-size: 0.85rem; line-height: 1.6; }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; font-size: 0.8rem; }
+    .compare div { background: #1a1a1a; padding: 0.75rem; border-radius: 6px; }
+    .compare h3 { font-size: 0.85rem; margin-bottom: 0.5rem; color: #aaa; }
+  </style>
+</head>
+<body>
+  <h1>Freeze Dry Protocol — Inscription Demo</h1>
+  <p class="subtitle">
+    Two ways to inscribe art on Solana. <strong>DIY</strong> = you inscribe directly (TX fees only).
+    <strong>Marketplace</strong> = create a job, a node inscribes for you (escrow fee split to network).
+    <br>Uses <code>@freezedry/compress</code> + <code>@freezedry/solana</code> + <code>@freezedry/jobs</code>.
+    <a href="https://github.com/freezedry-protocol/freezedry-protocol" target="_blank">Source</a>
+  </p>
+
+  <!-- Mode toggle -->
+  <div class="mode-toggle">
+    <button id="modeDiy" class="active" onclick="setMode('diy')">
+      DIY — Direct Inscription<br>
+      <small style="color:#888">You sign every memo TX. Pay only Solana fees.</small>
+    </button>
+    <button id="modeMarketplace" onclick="setMode('marketplace')">
+      Marketplace — Job Protocol<br>
+      <small style="color:#888">Escrow SOL. A node inscribes + verifies for you.</small>
+    </button>
+  </div>
+
+  <!-- Step 1: Connect -->
+  <div class="step active" id="step1">
+    <h2>1. Connect</h2>
+    <label>RPC Endpoint</label>
+    <input type="text" id="rpcUrl" value="https://api.devnet.solana.com">
+    <label>Network</label>
+    <select id="network">
+      <option value="devnet" selected>Devnet (free testing)</option>
+      <option value="mainnet-beta">Mainnet</option>
+    </select>
+    <button id="connectBtn">Connect Wallet</button>
+    <div id="walletStatus" class="stats"></div>
+  </div>
+
+  <!-- Step 2: Upload + Wrap -->
+  <div class="step" id="step2">
+    <h2>2. Choose & Wrap File</h2>
+    <input type="file" id="fileInput" disabled>
+    <img id="previewImg" class="preview hidden" alt="Preview">
+    <div id="compressProgress" class="progress"></div>
+    <div id="compressStats" class="stats"></div>
+  </div>
+
+  <!-- Step 3: Cost Breakdown -->
+  <div class="step" id="step3">
+    <h2>3. Cost Breakdown</h2>
+    <div id="costSection"></div>
+  </div>
+
+  <!-- Step 4: Execute -->
+  <div class="step" id="step4">
+    <h2 id="step4Title">4. Inscribe</h2>
+    <button id="executeBtn" disabled>Sign & Send</button>
+    <div id="executeProgress" class="progress"></div>
+    <div id="executeStats" class="stats"></div>
+  </div>
+
+  <!-- Step 5: Status (marketplace only) -->
+  <div class="step hidden" id="step5">
+    <h2>5. Job Status</h2>
+    <button id="pollBtn" disabled>Check Job Status</button>
+    <div id="pollProgress" class="progress"></div>
+    <div id="pollStats" class="stats"></div>
+  </div>
+
+  <div id="error"></div>
+
+  <script type="module">
+    // ── SDK imports ─────────────────────────────────────────────────────
+    const web3 = await import('https://esm.sh/@solana/web3.js@1.98.0?bundle');
+    const { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction,
+            ComputeBudgetProgram, LAMPORTS_PER_SOL } = web3;
+
+    // Dynamic imports — loaded on demand per mode
+    let compressMod = null;
+    let solanaMod = null;
+    let jobsMod = null;
+
+    async function loadCompressSDK() {
+      if (!compressMod) {
+        compressMod = await import('https://esm.sh/@freezedry/compress@0.1.0?bundle');
+      }
+      return compressMod;
+    }
+    async function loadSolanaSDK() {
+      if (!solanaMod) solanaMod = await import('https://esm.sh/@freezedry/solana@0.1.0?bundle');
+      return solanaMod;
+    }
+    async function loadJobsSDK() {
+      if (!jobsMod) jobsMod = await import('https://esm.sh/@freezedry/jobs@0.1.0?bundle');
+      return jobsMod;
+    }
+
+    // ── State ───────────────────────────────────────────────────────────
+    let mode = 'diy';
+    let wallet = null;
+    let fileBytes = null;
+    let blob = null;
+    let manifestHash = null;
+    let jobPDA = null;
+    let jobId = null;
+
+    const $ = (id) => document.getElementById(id);
+    const showError = (msg) => { $('error').textContent = msg; };
+
+    // ── Mode toggle ─────────────────────────────────────────────────────
+    window.setMode = (m) => {
+      mode = m;
+      $('modeDiy').classList.toggle('active', m === 'diy');
+      $('modeMarketplace').classList.toggle('active', m === 'marketplace');
+      $('step5').classList.toggle('hidden', m === 'diy');
+      $('step4Title').textContent = m === 'diy' ? '4. Inscribe (Direct)' : '4. Create Marketplace Job';
+      // Re-render cost if blob exists
+      if (blob) renderCost();
+    };
+
+    // ── Step 1: Connect wallet ──────────────────────────────────────────
+    $('connectBtn').onclick = async () => {
+      try {
+        if (!window.solana?.isPhantom) {
+          showError('Phantom wallet not found. Install it at phantom.app');
+          return;
+        }
+        const resp = await window.solana.connect();
+        wallet = window.solana;
+
+        const conn = new Connection($('rpcUrl').value, 'confirmed');
+        const bal = await conn.getBalance(resp.publicKey);
+
+        $('walletStatus').innerHTML =
+          `Connected: <span>${resp.publicKey.toBase58()}</span><br>` +
+          `Balance: <span>${(bal / LAMPORTS_PER_SOL).toFixed(4)} SOL</span>`;
+        $('step1').classList.add('done');
+        $('fileInput').disabled = false;
+        $('step2').classList.add('active');
+        showError('');
+      } catch (e) {
+        showError('Wallet connection failed: ' + e.message);
+      }
+    };
+
+    // ── Step 2: Upload + wrap ────────────────────────────────────────────
+    $('fileInput').onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Show preview if image
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        $('previewImg').src = url;
+        $('previewImg').classList.remove('hidden');
+      } else {
+        $('previewImg').classList.add('hidden');
+      }
+
+      const buf = await file.arrayBuffer();
+      fileBytes = new Uint8Array(buf);
+
+      // Build direct mode .hyd blob
+      try {
+        $('compressProgress').textContent = 'Wrapping file...';
+        const HEADER_SIZE = 49;
+        const hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', fileBytes));
+        const hdr = new Uint8Array(HEADER_SIZE);
+        hdr[0]=0x48; hdr[1]=0x59; hdr[2]=0x44; hdr[3]=0x01; hdr[4]=3;
+        const dv = new DataView(hdr.buffer);
+        dv.setUint16(5, 0, true); dv.setUint16(7, 0, true);
+        dv.setUint32(9, 0, true); dv.setUint32(13, fileBytes.length, true);
+        hdr.set(hashBytes, 17);
+
+        blob = new Uint8Array(HEADER_SIZE + fileBytes.length);
+        blob.set(hdr); blob.set(fileBytes, HEADER_SIZE);
+        manifestHash = 'sha256:' + Array.from(hashBytes).map(b => b.toString(16).padStart(2,'0')).join('');
+
+        $('compressStats').innerHTML =
+          `<span>${(fileBytes.byteLength / 1024).toFixed(1)} KB</span> file, ` +
+          `wrapped to <span>${(blob.byteLength / 1024).toFixed(1)} KB</span> blob<br>` +
+          `Hash: <span>${manifestHash.slice(0, 32)}...</span>`;
+        $('compressProgress').textContent = '';
+        $('step2').classList.add('done');
+        $('step3').classList.add('active');
+
+        renderCost();
+      } catch (err) {
+        showError('Wrap failed: ' + err.message);
+      }
+    };
+
+    // ── Step 3: Cost breakdown ──────────────────────────────────────────
+    async function renderCost() {
+      if (!blob) return;
+      const { estimateCost } = await loadSolanaSDK();
+      const cost = estimateCost(blob.byteLength);
+      const chunkCount = cost.chunks;
+
+      if (mode === 'diy') {
+        $('costSection').innerHTML = `
+          <div class="fee-breakdown">
+            <div class="fee-row"><span class="label">Memo chunks</span><span class="value">${chunkCount}</span></div>
+            <div class="fee-row"><span class="label">TX fee per chunk</span><span class="value">~5,000 lamports</span></div>
+            <div class="fee-row"><span class="label">Priority fee</span><span class="value">~5,000 lamports</span></div>
+            <div class="fee-row total"><span class="label">Total (you pay)</span><span class="value">~${(chunkCount * 0.00001).toFixed(5)} SOL</span></div>
+          </div>
+          <div class="compare">
+            <div><h3>You get</h3>Permanent on-chain storage. Reconstruct anytime with just TX signatures.</div>
+            <div><h3>Trade-off</h3>You sign every TX. No verification. No node network. No escrow protection.</div>
+          </div>
+        `;
+      } else {
+        // Marketplace mode — read config for fee info
+        try {
+          const { fetchConfig } = await loadJobsSDK();
+          const conn = new Connection($('rpcUrl').value, 'confirmed');
+          const config = await fetchConfig(conn);
+
+          if (config) {
+            const minEscrow = config.minEscrowLamports;
+            const minSol = (minEscrow / LAMPORTS_PER_SOL).toFixed(4);
+            const iBps = config.inscriberFeeBps;
+            const aBps = config.indexerFeeBps;
+            const tBps = config.treasuryFeeBps;
+            const rBps = config.referralFeeBps;
+
+            $('costSection').innerHTML = `
+              <div class="fee-breakdown">
+                <div class="fee-row"><span class="label">Memo chunks</span><span class="value">${chunkCount}</span></div>
+                <div class="fee-row"><span class="label">Min protocol escrow</span><span class="value">${minSol} SOL (${minEscrow.toLocaleString()} lamports)</span></div>
+                <div class="fee-row" style="margin-top:0.5rem;border-top:1px solid #222;padding-top:0.5rem">
+                  <span class="label">Escrow split</span><span class="value"></span>
+                </div>
+                <div class="fee-row"><span class="label" style="padding-left:1rem">Inscriber (node)</span><span class="value">${(iBps/100).toFixed(0)}%</span></div>
+                <div class="fee-row"><span class="label" style="padding-left:1rem">Attester (verifier)</span><span class="value">${(aBps/100).toFixed(0)}%</span></div>
+                <div class="fee-row"><span class="label" style="padding-left:1rem">Treasury (protocol)</span><span class="value">${(tBps/100).toFixed(0)}%</span></div>
+                <div class="fee-row"><span class="label" style="padding-left:1rem">Referrer</span><span class="value">${(rBps/100).toFixed(0)}%</span></div>
+                <div class="fee-row total"><span class="label">You pay (escrow)</span><span class="value">${minSol} SOL + TX fee</span></div>
+              </div>
+              <div class="compare">
+                <div><h3>You get</h3>Professional inscription by staked node. Independent verification. Hash-verified attestation. Escrow protection.</div>
+                <div><h3>How it works</h3>Your SOL is held in escrow. A node inscribes, another verifies. Once verified, escrow splits to the network. If it fails, you get a refund.</div>
+              </div>
+            `;
+          } else {
+            $('costSection').innerHTML = '<div class="stats">Jobs program not initialized on this network.</div>';
+          }
+        } catch (err) {
+          $('costSection').innerHTML = `<div class="stats">Could not read protocol config: ${err.message}</div>`;
+        }
+      }
+
+      $('step3').classList.add('done');
+      $('executeBtn').disabled = false;
+      $('step4').classList.add('active');
+    }
+
+    // ── Step 4: Execute ─────────────────────────────────────────────────
+    $('executeBtn').onclick = async () => {
+      $('executeBtn').disabled = true;
+      showError('');
+
+      if (mode === 'diy') {
+        await executeDIY();
+      } else {
+        await executeMarketplace();
+      }
+    };
+
+    async function executeDIY() {
+      try {
+        const { shred, buildMemoTxs, confirmBatch } = await loadSolanaSDK();
+        const rpcUrl = $('rpcUrl').value;
+        const conn = new Connection(rpcUrl, 'confirmed');
+
+        $('executeProgress').textContent = 'Shredding blob...';
+        const chunks = shred(blob);
+        const chunkArray = chunks.chunks || chunks;
+
+        $('executeProgress').textContent = 'Building transactions...';
+        const { blockhash } = await conn.getLatestBlockhash('confirmed');
+        const txs = buildMemoTxs(chunkArray, {
+          payer: new PublicKey(wallet.publicKey.toBase58()),
+          blockhash,
+          manifestHash: manifestHash.replace('sha256:', ''),
+        });
+
+        $('executeProgress').textContent = `Signing ${txs.length} transactions...`;
+        const signatures = [];
+        const batchSize = 10;
+        for (let i = 0; i < txs.length; i += batchSize) {
+          const batch = txs.slice(i, i + batchSize);
+          const signed = await wallet.signAllTransactions(batch);
+          for (const tx of signed) {
+            const sig = await conn.sendRawTransaction(tx.serialize(), {
+              skipPreflight: false, preflightCommitment: 'confirmed',
+            });
+            signatures.push(sig);
+          }
+          $('executeProgress').textContent = `Sent ${signatures.length}/${txs.length}...`;
+        }
+
+        $('executeProgress').textContent = 'Confirming...';
+        const result = await confirmBatch(rpcUrl, signatures);
+
+        const net = $('network').value;
+        $('executeStats').innerHTML =
+          `Confirmed: <span>${result.confirmed.length}/${signatures.length}</span> transactions<br>` +
+          `Explorer: <a href="https://solscan.io/tx/${signatures[0]}?cluster=${net}" target="_blank">View on Solscan</a><br>` +
+          `<br>Your art is permanently on Solana. Save the signatures to reconstruct it anytime.`;
+        $('executeProgress').textContent = 'Inscription complete.';
+        $('step4').classList.add('done');
+      } catch (e) {
+        showError('DIY inscription failed: ' + e.message);
+        $('executeBtn').disabled = false;
+      }
+    }
+
+    async function executeMarketplace() {
+      try {
+        const { buildCreateJobTx, calculateEscrow } = await loadJobsSDK();
+        const rpcUrl = $('rpcUrl').value;
+        const conn = new Connection(rpcUrl, 'confirmed');
+        const creatorKey = new PublicKey(wallet.publicKey.toBase58());
+
+        $('executeProgress').textContent = 'Calculating escrow...';
+        const escrow = await calculateEscrow({
+          connection: conn,
+          blobSizeBytes: blob.byteLength,
+        });
+
+        $('executeProgress').textContent = 'Building create_job transaction...';
+        const result = await buildCreateJobTx({
+          connection: conn,
+          creator: creatorKey,
+          contentHash: manifestHash,
+          chunkCount: escrow.chunkCount,
+          escrowLamports: escrow.minEscrowLamports,
+          blobSource: '', // nodes use fallback cascade
+        });
+
+        jobPDA = result.jobPDA;
+        jobId = result.jobId;
+
+        $('executeProgress').textContent = 'Sign in wallet to create job + escrow SOL...';
+        const signed = await wallet.signTransaction(result.transaction);
+        const sig = await conn.sendRawTransaction(signed.serialize(), {
+          skipPreflight: false, preflightCommitment: 'confirmed',
+        });
+
+        await conn.confirmTransaction(sig, 'confirmed');
+
+        const net = $('network').value;
+        $('executeStats').innerHTML =
+          `Job created: <span>#${jobId}</span><br>` +
+          `Job PDA: <span>${jobPDA.toBase58().slice(0, 16)}...</span><br>` +
+          `Escrow: <span>${(escrow.minEscrowLamports / LAMPORTS_PER_SOL).toFixed(4)} SOL</span><br>` +
+          `TX: <a href="https://solscan.io/tx/${sig}?cluster=${net}" target="_blank">View on Solscan</a>`;
+        $('executeProgress').textContent = 'Job created. Waiting for a node to claim it...';
+        $('step4').classList.add('done');
+        $('step5').classList.remove('hidden');
+        $('pollBtn').disabled = false;
+        $('step5').classList.add('active');
+      } catch (e) {
+        showError('Marketplace job creation failed: ' + e.message);
+        $('executeBtn').disabled = false;
+      }
+    }
+
+    // ── Step 5: Poll job status ─────────────────────────────────────────
+    $('pollBtn').onclick = async () => {
+      try {
+        const { fetchJob } = await loadJobsSDK();
+        const conn = new Connection($('rpcUrl').value, 'confirmed');
+        const job = await fetchJob(conn, jobId);
+
+        if (!job) {
+          $('pollStats').textContent = 'Job PDA not found.';
+          return;
+        }
+
+        const statusColors = {
+          open: '#4a9eff', claimed: '#f0c040', submitted: '#c084fc',
+          completed: '#2ea043', cancelled: '#888', expired: '#f85149',
+        };
+        const color = statusColors[job.status] || '#888';
+
+        $('pollStats').innerHTML =
+          `Status: <span style="color:${color}">${job.status.toUpperCase()}</span><br>` +
+          `Writer: <span>${job.writer.toBase58() === '11111111111111111111111111111111' ? '(none yet)' : job.writer.toBase58().slice(0, 16) + '...'}</span><br>` +
+          `Attestations: <span>${job.attestationCount}</span><br>` +
+          (job.pointerSig ? `Pointer: <a href="https://solscan.io/tx/${job.pointerSig}?cluster=${$('network').value}" target="_blank">${job.pointerSig.slice(0, 16)}...</a><br>` : '') +
+          `<br><em>Click again to refresh. Job progresses: Open → Claimed → Submitted → Completed.</em>`;
+
+        if (job.status === 'completed') {
+          $('step5').classList.add('done');
+          $('pollProgress').textContent = 'Inscription complete and verified by the network.';
+          $('pollStats').innerHTML += `<div class="info-box">Your escrow has been distributed:<br>` +
+            `Inscriber (node that wrote the data) + Attester (node that verified) + Treasury + Referrer.<br>` +
+            `The art is permanently on Solana.</div>`;
+        }
+      } catch (e) {
+        showError('Poll failed: ' + e.message);
+      }
+    };
+  </script>
+</body>
+</html>

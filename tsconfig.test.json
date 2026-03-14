@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "resolveJsonModule": true,
+    "types": ["mocha", "chai", "node"],
+    "noEmit": true
+  },
+  "ts-node": {
+    "transpileOnly": true
+  },
+  "include": [
+    "packages/*/test/**/*.ts",
+    "packages/*/src/**/*.ts"
+  ]
+}

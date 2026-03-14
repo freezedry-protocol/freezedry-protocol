@@ -1,0 +1,52 @@
+{
+  "name": "@freezedry/compress",
+  "version": "0.1.0",
+  "description": "Freeze Dry Protocol — lossless image compression (dehydrate + hydrate)",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./node": {
+      "import": "./dist/node.js",
+      "require": "./dist/node.cjs",
+      "types": "./dist/node.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "wasm"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "freezedry",
+    "image-compression",
+    "avif",
+    "lossless",
+    "solana",
+    "on-chain-art"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^12.20.55",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "sharp": ">=0.33.0"
+  },
+  "peerDependenciesMeta": {
+    "sharp": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@freezedry/jobs",
+  "version": "0.1.0",
+  "description": "Freeze Dry Protocol — On-chain inscription job marketplace client",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "freezedry",
+    "solana",
+    "inscription",
+    "jobs",
+    "marketplace",
+    "pda",
+    "on-chain"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@solana/web3.js": "^1.90.0"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "@coral-xyz/anchor": "^0.30.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

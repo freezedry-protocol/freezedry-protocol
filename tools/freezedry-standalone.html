@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Freeze Dry — Standalone</title>
+<style>
+  :root { --bg:#1C1917; --surface:#292524; --elevated:#3B3533; --text:#F5F0EB; --muted:#A8A29E; --orange:#FF7A3D; --sage:#FBBF24; --border:#44403C; --input-bg:#1C1917; --r:8px; --red:#EF4444; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+  .c{max-width:720px;margin:0 auto;padding:2rem 1.5rem}
+  h1{font-size:1.5rem;margin-bottom:0.25rem;letter-spacing:-0.01em}
+  h1 span{color:var(--orange)}
+  .sub{color:var(--muted);font-size:0.85rem;margin-bottom:1.25rem}
+  .tab-bar{display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--border)}
+  .tab{padding:0.7rem 1.6rem;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.95rem;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;font-family:inherit}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--orange);border-bottom-color:var(--orange)}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;margin-bottom:1.25rem}
+  .section-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);margin-bottom:0.75rem;padding-bottom:0.4rem;border-bottom:1px solid var(--border)}
+  label{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:0.4rem;font-weight:500}
+  textarea,input[type=text],input[type=password]{width:100%;padding:0.7rem 0.9rem;background:var(--input-bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical;transition:border-color .2s}
+  textarea::placeholder,input::placeholder{color:#78716C}
+  textarea:focus,input:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 2px rgba(255,122,61,0.15)}
+  textarea{min-height:100px}
+  select{transition:border-color .2s}
+  select:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 2px rgba(255,122,61,0.15)}
+  .row{display:flex;gap:0.75rem;margin-top:0.85rem;flex-wrap:wrap;align-items:end}
+  .row .field{flex:1;min-width:200px}
+  .btn{display:inline-block;padding:0.7rem 1.3rem;border-radius:var(--r);font-size:0.9rem;font-weight:600;border:none;cursor:pointer;transition:all .2s}
+  .btn:hover{opacity:0.88;transform:translateY(-1px)}
+  .btn:disabled{opacity:0.35;cursor:not-allowed;transform:none}
+  .btn-go{background:var(--sage);color:#1C1917}
+  .btn-dl{background:var(--elevated);color:var(--text);border:1px solid var(--border)}
+  .btn-sm{padding:0.45rem 0.85rem;font-size:0.8rem}
+  .btn-danger{background:var(--red);color:white}
+  .btn-file{background:var(--elevated);color:var(--muted);border:1px solid var(--border);font-size:0.82rem;padding:0.55rem 1rem;border-radius:var(--r)}
+  .progress{margin:1rem 0}
+  .pbar{height:5px;background:var(--elevated);border-radius:3px;overflow:hidden}
+  .pfill{height:100%;width:0%;background:linear-gradient(90deg,var(--sage),var(--orange));transition:width .3s}
+  .ptext{font-size:0.82rem;color:var(--muted);margin-top:0.5rem}
+  canvas{max-width:100%;border-radius:var(--r);display:block;margin:1rem auto}
+  .hidden{display:none!important}
+  .info{font-size:0.78rem;color:var(--muted);margin-top:0.6rem;line-height:1.6}
+  .or{color:var(--muted);font-size:0.82rem;text-align:center;padding:0.6rem 0}
+  .warn{background:#422006;border:1px solid rgba(255,122,61,0.3);border-radius:var(--r);padding:0.85rem 1rem;font-size:0.82rem;color:#FDBA74;line-height:1.6;margin-bottom:0.85rem}
+  .seed-box{font-family:monospace;font-size:0.82rem;background:var(--input-bg);border:1px solid var(--border);border-radius:var(--r);padding:0.75rem;word-break:break-word;user-select:all;line-height:1.8;color:var(--text);margin-top:0.35rem}
+  .addr{font-family:monospace;font-size:0.78rem;word-break:break-all;color:var(--muted);user-select:all;cursor:pointer;padding:0.3rem 0}
+  .addr:hover{color:var(--text)}
+  .bal{font-size:1.4rem;font-weight:700;color:var(--sage)}
+  footer{text-align:center;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.78rem}
+  footer a{color:var(--orange);text-decoration:none}
+  @media(max-width:600px){.c{padding:1rem .75rem}.row{flex-direction:column}.btn{width:100%;text-align:center}}
+</style>
+</head>
+<body>
+<div class="c">
+  <h1><span>Freeze Dry</span> — Standalone</h1>
+  <p class="sub">Inscribe any file to Solana or reconstruct from chain. Zero dependencies. Your browser is the tool.</p>
+
+  <div class="tab-bar">
+    <button class="tab active" data-tab="inscribe">Inscribe</button>
+    <button class="tab" data-tab="hydrate">Hydrate</button>
+  </div>
+
+  <!-- ═══ HYDRATE TAB ═══ -->
+  <div id="tab-hydrate" class="tab-content">
+  <div class="panel">
+    <div class="section-label">Reconstruct from Chain</div>
+
+    <!-- Lookup mode selector -->
+    <div style="display:flex;gap:0;margin-bottom:1rem;border-bottom:1px solid var(--border)">
+      <button class="hydrate-mode active" data-mode="sigs" style="padding:0.5rem 1rem;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.82rem;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;font-family:inherit">Signatures</button>
+      <button class="hydrate-mode" data-mode="pointer" style="padding:0.5rem 1rem;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.82rem;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;font-family:inherit">Pointer Lookup</button>
+      <button class="hydrate-mode" data-mode="nft" style="padding:0.5rem 1rem;cursor:pointer;background:transparent;border:none;color:var(--muted);font-size:0.82rem;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;font-family:inherit">NFT Lookup</button>
+    </div>
+
+    <!-- Mode: Signatures (default) -->
+    <div id="mode-sigs" class="hydrate-mode-panel">
+      <label for="sigs">Signature JSON (paste array or upload file)</label>
+      <textarea id="sigs" placeholder='["5abc...","2def...", ...]'></textarea>
+      <div class="or">— or —</div>
+      <input type="file" id="file-input" accept=".json" class="btn-file">
+    </div>
+
+    <!-- Mode: Pointer Lookup -->
+    <div id="mode-pointer" class="hydrate-mode-panel hidden">
+      <label for="pointer-sig">Pointer Transaction Signature</label>
+      <input type="text" id="pointer-sig" placeholder="Paste a single pointer signature — discovers all chunks automatically">
+      <p class="info">The pointer memo is the index for your inscription. It contains the hash, chunk count, and references to all chunk transactions. One signature recovers everything.</p>
+    </div>
+
+    <!-- Mode: NFT Lookup -->
+    <div id="mode-nft" class="hydrate-mode-panel hidden">
+      <label for="nft-addr">NFT Mint Address</label>
+      <input type="text" id="nft-addr" placeholder="Paste a Metaplex Core NFT address with Freeze Dry attributes">
+      <p class="info">Reads the <code style="color:var(--orange)">inscriptionHash</code> attribute from the NFT, finds the pointer memo on-chain, and hydrates automatically. Requires a DAS-compatible RPC (Helius, Triton, etc).</p>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="rpc-sel">RPC Endpoint</label>
+        <select id="rpc-sel" style="width:100%;padding:0.7rem 0.9rem;background:var(--input-bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:0.85rem;font-family:inherit">
+          <option value="https://api.mainnet-beta.solana.com">Mainnet (Public)</option>
+          <option value="https://api.devnet.solana.com">Devnet (Public)</option>
+          <option value="custom">Custom RPC URL</option>
+        </select>
+        <input type="text" id="rpc" class="hidden" value="" placeholder="https://your-rpc-url.com" style="margin-top:0.35rem">
+      </div>
+      <button id="go" class="btn btn-go">Hydrate from Chain</button>
+    </div>
+    <div id="pw-group" class="hidden" style="margin-top:0.75rem">
+      <label for="pw">Password (encrypted blob detected)</label>
+      <input type="password" id="pw" placeholder="Enter password to decrypt" style="margin-bottom:0.5rem">
+      <button id="pw-go" class="btn btn-go" style="width:100%">Decrypt &amp; Hydrate</button>
+    </div>
+    <p class="info">Reconstructs files directly from Solana memo transactions. No WASM, no CDN, no servers.<br>
+    Public Solana RPC is slow (~5s/chunk). For faster reads, use a <a href="https://www.helius.dev/" style="color:var(--orange)" target="_blank">Helius</a> or <a href="https://www.quicknode.com/" style="color:var(--orange)" target="_blank">QuickNode</a> RPC URL.</p>
+  </div>
+
+  <div id="prog" class="progress hidden">
+    <div class="pbar"><div id="pfill" class="pfill"></div></div>
+    <p id="ptext" class="ptext">Starting...</p>
+  </div>
+
+  <canvas id="canvas" class="hidden"></canvas>
+
+  <div id="actions" class="hidden" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.5rem">
+    <button id="dl" class="btn btn-dl">Download PNG</button>
+    <span id="verify" style="font-size:0.8rem;color:var(--sage);align-self:center"></span>
+  </div>
+
+  </div><!-- /tab-hydrate -->
+
+  <!-- ═══ INSCRIBE TAB ═══ -->
+  <div id="tab-inscribe" class="tab-content active">
+    <div id="ed25519-warn" class="warn hidden">Ed25519 not supported in this browser. Use Chrome 113+ or Safari 17+ for inscription. Hydration works in all browsers.</div>
+
+    <!-- Wallet Panel -->
+    <div class="panel" id="wallet-panel">
+      <div class="section-label">Wallet</div>
+      <div class="warn">Temporary burner wallet for inscribing — not a daily wallet. Fund only what you need, reclaim the rest when done. Your seed phrase is encrypted with your PIN and stored locally. No server, no tracking. Without your seed phrase, funds cannot be recovered.</div>
+      <div id="wallet-empty">
+        <div style="margin-bottom:0.5rem">
+          <label for="wallet-pin">PIN <span style="font-size:0.7rem;color:var(--muted)">(encrypts wallet in browser — remember this)</span></label>
+          <input type="password" id="wallet-pin" placeholder="Set a PIN (min 4 characters)" style="max-width:280px">
+        </div>
+        <div class="row">
+          <button id="gen-wallet" class="btn btn-go">Generate Burner Wallet</button>
+          <button id="show-restore" class="btn btn-dl">Restore from Phrase</button>
+        </div>
+        <div id="restore-group" class="hidden" style="margin-top:0.75rem">
+          <label for="restore-phrase">Enter 24-word seed phrase</label>
+          <textarea id="restore-phrase" style="min-height:60px" placeholder="word1 word2 word3 ..."></textarea>
+          <button id="restore-go" class="btn btn-go" style="margin-top:0.5rem;width:100%">Restore Wallet</button>
+        </div>
+      </div>
+      <div id="wallet-unlock" class="hidden">
+        <label>Wallet found — enter PIN to unlock</label>
+        <div class="row">
+          <div class="field">
+            <input type="password" id="unlock-pin" placeholder="Enter your PIN">
+          </div>
+          <button id="unlock-btn" class="btn btn-go">Unlock</button>
+          <button id="forget-btn" class="btn btn-sm btn-danger">Forget Wallet</button>
+        </div>
+        <p id="unlock-err" class="info" style="color:var(--red)"></p>
+      </div>
+      <div id="wallet-info" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+          <label style="margin:0">Wallet Address <span style="font-size:0.7rem;color:var(--muted)">(click to copy)</span></label>
+          <button id="cycle-wallet" class="btn btn-sm btn-dl">New Wallet</button>
+        </div>
+        <div class="addr" id="wallet-addr" title="Click to copy"></div>
+        <div style="margin-top:0.75rem;display:flex;justify-content:space-between;align-items:baseline">
+          <div><label>Balance</label><div class="bal" id="wallet-bal">0 SOL</div></div>
+          <div id="fund-hint" class="info" style="text-align:right">Send SOL to the address above to begin</div>
+        </div>
+        <details style="margin-top:0.75rem">
+          <summary style="cursor:pointer;font-size:0.85rem;color:var(--muted)">Recovery Seed Phrase</summary>
+          <div class="seed-box" id="seed-words"></div>
+          <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center;flex-wrap:wrap">
+            <button id="copy-seed" class="btn btn-sm btn-dl">Copy (clears clipboard in 60s)</button>
+            <button id="clear-wallet" class="btn btn-sm btn-danger">Clear Wallet from Browser</button>
+          </div>
+          <p class="info">Write these 24 words down. They recover this wallet in this tool or any Solana wallet (Phantom, Solflare). Clear the wallet from this browser when you're done.</p>
+        </details>
+      </div>
+    </div>
+
+    <!-- File + Inscription Panel -->
+    <div class="panel" id="inscribe-file-panel">
+      <div class="section-label">Inscription</div>
+      <label for="art-file">Select File</label>
+      <input type="file" id="art-file" class="btn-file">
+      <div id="art-preview" class="hidden" style="margin-top:0.75rem">
+        <canvas id="art-canvas" style="max-width:100%;max-height:200px;border-radius:var(--r)"></canvas>
+        <div id="art-info" class="info"></div>
+      </div>
+      <div style="margin-top:0.75rem">
+        <label for="enc-pw">Password (optional — encrypts before inscribing)</label>
+        <input type="password" id="enc-pw" placeholder="Leave blank for open inscription">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="ins-rpc-sel">RPC Endpoint</label>
+          <select id="ins-rpc-sel" style="width:100%;padding:0.7rem 0.9rem;background:var(--input-bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:0.85rem;font-family:inherit">
+            <option value="https://api.mainnet-beta.solana.com">Mainnet (Public)</option>
+            <option value="https://api.devnet.solana.com">Devnet (Public)</option>
+            <option value="custom">Custom RPC URL</option>
+          </select>
+          <input type="text" id="ins-rpc" class="hidden" value="" placeholder="https://your-rpc-url.com" style="margin-top:0.35rem">
+        </div>
+        <button id="inscribe-btn" class="btn btn-go" disabled>Inscribe to Chain</button>
+      </div>
+      <p class="info">Inscribe any file — images, documents, code, backups. Each memo TX costs ~0.000009 SOL. A 500KB file = ~876 chunks = ~0.008 SOL.<br>Public RPC is slow (~1 TX/5s). Use <a href="https://www.helius.dev/" style="color:var(--orange)" target="_blank">Helius</a> for faster inscription.</p>
+    </div>
+
+    <!-- Inscription Progress -->
+    <div id="ins-prog" class="progress hidden">
+      <div class="pbar"><div id="ins-pfill" class="pfill"></div></div>
+      <p id="ins-ptext" class="ptext">Ready</p>
+    </div>
+
+    <!-- Resume Panel -->
+    <div id="resume-panel" class="panel hidden">
+      <label>Resume Inscription</label>
+      <div id="resume-info" class="info"></div>
+      <div class="row">
+        <button id="resume-btn" class="btn btn-go">Resume</button>
+        <button id="discard-btn" class="btn btn-dl">Discard &amp; Start Fresh</button>
+      </div>
+    </div>
+
+    <!-- Results Panel -->
+    <div id="result-panel" class="panel hidden">
+      <div class="section-label">Result</div>
+      <div id="result-info" class="info"></div>
+      <div class="row">
+        <button id="export-sigs" class="btn btn-dl">Download Signatures JSON</button>
+      </div>
+    </div>
+
+    <!-- Reclaim Panel -->
+    <div id="reclaim-panel" class="panel hidden">
+      <div class="section-label">Reclaim Funds</div>
+      <div class="row">
+        <div class="field">
+          <label for="dest-addr">Destination Wallet Address</label>
+          <input type="text" id="dest-addr" placeholder="Your Solana wallet address">
+        </div>
+        <button id="reclaim-btn" class="btn btn-go">Reclaim SOL</button>
+      </div>
+    </div>
+  </div><!-- /tab-inscribe -->
+
+  <footer>
+    <p>This file is the insurance policy. Save it. It works forever with just a browser and Solana.</p>
+    <p style="margin-top:0.35rem"><a href="https://freezedry.art">freezedry.art</a></p>
+    <div id="tip-section" style="margin-top:0.75rem">
+      <button id="tip-btn" class="btn btn-sm btn-dl" style="opacity:0.7" disabled>Tip Freeze Dry</button>
+      <span id="tip-status" style="font-size:0.75rem;color:var(--sage);margin-left:0.5rem"></span>
+    </div>
+  </footer>
+</div>
+
+<script>
+// Freeze Dry Standalone — ZERO external dependencies
+// Hydrates (reconstructs) AND inscribes art to/from Solana memo transactions
+// Uses only browser-native APIs: Web Crypto (Ed25519, AES-GCM, SHA-256, PBKDF2), fetch, canvas
+(function() {
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
+const MEMO_PID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+const COMPUTE_BUDGET_PID = 'ComputeBudget111111111111111111111111111111';
+const HEADER_SIZE = 49;
+const MEMO_PAYLOAD_SIZE = 585;
+const PBKDF2_ITERATIONS = 600000;
+const CU_LIMIT = 350000;
+const CU_PRICE_MICRO = 10000;
+const LAMPORTS_PER_SOL = 1_000_000_000;
+const TX_FEE_EST = 8500; // ~5000 base + ~3500 priority per TX
+const BH_MAX_AGE = 25000; // refresh blockhash every 25s
+
+// ═══════════════════════════════════════════════════════════════════
+// BIP39 ENGLISH WORDLIST (2048 words)
+// ═══════════════════════════════════════════════════════════════════
+const BIP39 = "abandon,ability,able,about,above,absent,absorb,abstract,absurd,abuse,access,accident,account,accuse,achieve,acid,acoustic,acquire,across,act,action,actor,actress,actual,adapt,add,addict,address,adjust,admit,adult,advance,advice,aerobic,affair,afford,afraid,again,age,agent,agree,ahead,aim,air,airport,aisle,alarm,album,alcohol,alert,alien,all,alley,allow,almost,alone,alpha,already,also,alter,always,amateur,amazing,among,amount,amused,analyst,anchor,ancient,anger,angle,angry,animal,ankle,announce,annual,another,answer,antenna,antique,anxiety,any,apart,apology,appear,apple,approve,april,arch,arctic,area,arena,argue,arm,armed,armor,army,around,arrange,arrest,arrive,arrow,art,artefact,artist,artwork,ask,aspect,assault,asset,assist,assume,asthma,athlete,atom,attack,attend,attitude,attract,auction,audit,august,aunt,author,auto,autumn,average,avocado,avoid,awake,aware,away,awesome,awful,awkward,axis,baby,bachelor,bacon,badge,bag,balance,balcony,ball,bamboo,banana,banner,bar,barely,bargain,barrel,base,basic,basket,battle,beach,bean,beauty,because,become,beef,before,begin,behave,behind,believe,below,belt,bench,benefit,best,betray,better,between,beyond,bicycle,bid,bike,bind,biology,bird,birth,bitter,black,blade,blame,blanket,blast,bleak,bless,blind,blood,blossom,blouse,blue,blur,blush,board,boat,body,boil,bomb,bone,bonus,book,boost,border,boring,borrow,boss,bottom,bounce,box,boy,bracket,brain,brand,brass,brave,bread,breeze,brick,bridge,brief,bright,bring,brisk,broccoli,broken,bronze,broom,brother,brown,brush,bubble,buddy,budget,buffalo,build,bulb,bulk,bullet,bundle,bunker,burden,burger,burst,bus,business,busy,butter,buyer,buzz,cabbage,cabin,cable,cactus,cage,cake,call,calm,camera,camp,can,canal,cancel,candy,cannon,canoe,canvas,canyon,capable,capital,captain,car,carbon,card,cargo,carpet,carry,cart,case,cash,casino,castle,casual,cat,catalog,catch,category,cattle,caught,cause,caution,cave,ceiling,celery,cement,census,century,cereal,certain,chair,chalk,champion,change,chaos,chapter,charge,chase,chat,cheap,check,cheese,chef,cherry,chest,chicken,chief,child,chimney,choice,choose,chronic,chuckle,chunk,churn,cigar,cinnamon,circle,citizen,city,civil,claim,clap,clarify,claw,clay,clean,clerk,clever,click,client,cliff,climb,clinic,clip,clock,clog,close,cloth,cloud,clown,club,clump,cluster,clutch,coach,coast,coconut,code,coffee,coil,coin,collect,color,column,combine,come,comfort,comic,common,company,concert,conduct,confirm,congress,connect,consider,control,convince,cook,cool,copper,copy,coral,core,corn,correct,cost,cotton,couch,country,couple,course,cousin,cover,coyote,crack,cradle,craft,cram,crane,crash,crater,crawl,crazy,cream,credit,creek,crew,cricket,crime,crisp,critic,crop,cross,crouch,crowd,crucial,cruel,cruise,crumble,crunch,crush,cry,crystal,cube,culture,cup,cupboard,curious,current,curtain,curve,cushion,custom,cute,cycle,dad,damage,damp,dance,danger,daring,dash,daughter,dawn,day,deal,debate,debris,decade,december,decide,decline,decorate,decrease,deer,defense,define,defy,degree,delay,deliver,demand,demise,denial,dentist,deny,depart,depend,deposit,depth,deputy,derive,describe,desert,design,desk,despair,destroy,detail,detect,develop,device,devote,diagram,dial,diamond,diary,dice,diesel,diet,differ,digital,dignity,dilemma,dinner,dinosaur,direct,dirt,disagree,discover,disease,dish,dismiss,disorder,display,distance,divert,divide,divorce,dizzy,doctor,document,dog,doll,dolphin,domain,donate,donkey,donor,door,dose,double,dove,draft,dragon,drama,drastic,draw,dream,dress,drift,drill,drink,drip,drive,drop,drum,dry,duck,dumb,dune,during,dust,dutch,duty,dwarf,dynamic,eager,eagle,early,earn,earth,easily,east,easy,echo,ecology,economy,edge,edit,educate,effort,egg,eight,either,elbow,elder,electric,elegant,element,elephant,elevator,elite,else,embark,embody,embrace,emerge,emotion,employ,empower,empty,enable,enact,end,endless,endorse,enemy,energy,enforce,engage,engine,enhance,enjoy,enlist,enough,enrich,enroll,ensure,enter,entire,entry,envelope,episode,equal,equip,era,erase,erode,erosion,error,erupt,escape,essay,essence,estate,eternal,ethics,evidence,evil,evoke,evolve,exact,example,excess,exchange,excite,exclude,excuse,execute,exercise,exhaust,exhibit,exile,exist,exit,exotic,expand,expect,expire,explain,expose,express,extend,extra,eye,eyebrow,fabric,face,faculty,fade,faint,faith,fall,false,fame,family,famous,fan,fancy,fantasy,farm,fashion,fat,fatal,father,fatigue,fault,favorite,feature,february,federal,fee,feed,feel,female,fence,festival,fetch,fever,few,fiber,fiction,field,figure,file,film,filter,final,find,fine,finger,finish,fire,firm,first,fiscal,fish,fit,fitness,fix,flag,flame,flash,flat,flavor,flee,flight,flip,float,flock,floor,flower,fluid,flush,fly,foam,focus,fog,foil,fold,follow,food,foot,force,forest,forget,fork,fortune,forum,forward,fossil,foster,found,fox,fragile,frame,frequent,fresh,friend,fringe,frog,front,frost,frown,frozen,fruit,fuel,fun,funny,furnace,fury,future,gadget,gain,galaxy,gallery,game,gap,garage,garbage,garden,garlic,garment,gas,gasp,gate,gather,gauge,gaze,general,genius,genre,gentle,genuine,gesture,ghost,giant,gift,giggle,ginger,giraffe,girl,give,glad,glance,glare,glass,glide,glimpse,globe,gloom,glory,glove,glow,glue,goat,goddess,gold,good,goose,gorilla,gospel,gossip,govern,gown,grab,grace,grain,grant,grape,grass,gravity,great,green,grid,grief,grit,grocery,group,grow,grunt,guard,guess,guide,guilt,guitar,gun,gym,habit,hair,half,hammer,hamster,hand,happy,harbor,hard,harsh,harvest,hat,have,hawk,hazard,head,health,heart,heavy,hedgehog,height,hello,helmet,help,hen,hero,hidden,high,hill,hint,hip,hire,history,hobby,hockey,hold,hole,holiday,hollow,home,honey,hood,hope,horn,horror,horse,hospital,host,hotel,hour,hover,hub,huge,human,humble,humor,hundred,hungry,hunt,hurdle,hurry,hurt,husband,hybrid,ice,icon,idea,identify,idle,ignore,ill,illegal,illness,image,imitate,immense,immune,impact,impose,improve,impulse,inch,include,income,increase,index,indicate,indoor,industry,infant,inflict,inform,inhale,inherit,initial,inject,injury,inmate,inner,innocent,input,inquiry,insane,insect,inside,inspire,install,intact,interest,into,invest,invite,involve,iron,island,isolate,issue,item,ivory,jacket,jaguar,jar,jazz,jealous,jeans,jelly,jewel,job,join,joke,journey,joy,judge,juice,jump,jungle,junior,junk,just,kangaroo,keen,keep,ketchup,key,kick,kid,kidney,kind,kingdom,kiss,kit,kitchen,kite,kitten,kiwi,knee,knife,knock,know,lab,label,labor,ladder,lady,lake,lamp,language,laptop,large,later,latin,laugh,laundry,lava,law,lawn,lawsuit,layer,lazy,leader,leaf,learn,leave,lecture,left,leg,legal,legend,leisure,lemon,lend,length,lens,leopard,lesson,letter,level,liar,liberty,library,license,life,lift,light,like,limb,limit,link,lion,liquid,list,little,live,lizard,load,loan,lobster,local,lock,logic,lonely,long,loop,lottery,loud,lounge,love,loyal,lucky,luggage,lumber,lunar,lunch,luxury,lyrics,machine,mad,magic,magnet,maid,mail,main,major,make,mammal,man,manage,mandate,mango,mansion,manual,maple,marble,march,margin,marine,market,marriage,mask,mass,master,match,material,math,matrix,matter,maximum,maze,meadow,mean,measure,meat,mechanic,medal,media,melody,melt,member,memory,mention,menu,mercy,merge,merit,merry,mesh,message,metal,method,middle,midnight,milk,million,mimic,mind,minimum,minor,minute,miracle,mirror,misery,miss,mistake,mix,mixed,mixture,mobile,model,modify,mom,moment,monitor,monkey,monster,month,moon,moral,more,morning,mosquito,mother,motion,motor,mountain,mouse,move,movie,much,muffin,mule,multiply,muscle,museum,mushroom,music,must,mutual,myself,mystery,myth,naive,name,napkin,narrow,nasty,nation,nature,near,neck,need,negative,neglect,neither,nephew,nerve,nest,net,network,neutral,never,news,next,nice,night,noble,noise,nominee,noodle,normal,north,nose,notable,note,nothing,notice,novel,now,nuclear,number,nurse,nut,oak,obey,object,oblige,obscure,observe,obtain,obvious,occur,ocean,october,odor,off,offer,office,often,oil,okay,old,olive,olympic,omit,once,one,onion,online,only,open,opera,opinion,oppose,option,orange,orbit,orchard,order,ordinary,organ,orient,original,orphan,ostrich,other,outdoor,outer,output,outside,oval,oven,over,own,owner,oxygen,oyster,ozone,pact,paddle,page,pair,palace,palm,panda,panel,panic,panther,paper,parade,parent,park,parrot,party,pass,patch,path,patient,patrol,pattern,pause,pave,payment,peace,peanut,pear,peasant,pelican,pen,penalty,pencil,people,pepper,perfect,permit,person,pet,phone,photo,phrase,physical,piano,picnic,picture,piece,pig,pigeon,pill,pilot,pink,pioneer,pipe,pistol,pitch,pizza,place,planet,plastic,plate,play,please,pledge,pluck,plug,plunge,poem,poet,point,polar,pole,police,pond,pony,pool,popular,portion,position,possible,post,potato,pottery,poverty,powder,power,practice,praise,predict,prefer,prepare,present,pretty,prevent,price,pride,primary,print,priority,prison,private,prize,problem,process,produce,profit,program,project,promote,proof,property,prosper,protect,proud,provide,public,pudding,pull,pulp,pulse,pumpkin,punch,pupil,puppy,purchase,purity,purpose,purse,push,put,puzzle,pyramid,quality,quantum,quarter,question,quick,quit,quiz,quote,rabbit,raccoon,race,rack,radar,radio,rail,rain,raise,rally,ramp,ranch,random,range,rapid,rare,rate,rather,raven,raw,razor,ready,real,reason,rebel,rebuild,recall,receive,recipe,record,recycle,reduce,reflect,reform,refuse,region,regret,regular,reject,relax,release,relief,rely,remain,remember,remind,remove,render,renew,rent,reopen,repair,repeat,replace,report,require,rescue,resemble,resist,resource,response,result,retire,retreat,return,reunion,reveal,review,reward,rhythm,rib,ribbon,rice,rich,ride,ridge,rifle,right,rigid,ring,riot,ripple,risk,ritual,rival,river,road,roast,robot,robust,rocket,romance,roof,rookie,room,rose,rotate,rough,round,route,royal,rubber,rude,rug,rule,run,runway,rural,sad,saddle,sadness,safe,sail,salad,salmon,salon,salt,salute,same,sample,sand,satisfy,satoshi,sauce,sausage,save,say,scale,scan,scare,scatter,scene,scheme,school,science,scissors,scorpion,scout,scrap,screen,script,scrub,sea,search,season,seat,second,secret,section,security,seed,seek,segment,select,sell,seminar,senior,sense,sentence,series,service,session,settle,setup,seven,shadow,shaft,shallow,share,shed,shell,sheriff,shield,shift,shine,ship,shiver,shock,shoe,shoot,shop,short,shoulder,shove,shrimp,shrug,shuffle,shy,sibling,sick,side,siege,sight,sign,silent,silk,silly,silver,similar,simple,since,sing,siren,sister,situate,six,size,skate,sketch,ski,skill,skin,skirt,skull,slab,slam,sleep,slender,slice,slide,slight,slim,slogan,slot,slow,slush,small,smart,smile,smoke,smooth,snack,snake,snap,sniff,snow,soap,soccer,social,sock,soda,soft,solar,soldier,solid,solution,solve,someone,song,soon,sorry,sort,soul,sound,soup,source,south,space,spare,spatial,spawn,speak,special,speed,spell,spend,sphere,spice,spider,spike,spin,spirit,split,spoil,sponsor,spoon,sport,spot,spray,spread,spring,spy,square,squeeze,squirrel,stable,stadium,staff,stage,stairs,stamp,stand,start,state,stay,steak,steel,stem,step,stereo,stick,still,sting,stock,stomach,stone,stool,story,stove,strategy,street,strike,strong,struggle,student,stuff,stumble,style,subject,submit,subway,success,such,sudden,suffer,sugar,suggest,suit,summer,sun,sunny,sunset,super,supply,supreme,sure,surface,surge,surprise,surround,survey,suspect,sustain,swallow,swamp,swap,swarm,swear,sweet,swift,swim,swing,switch,sword,symbol,symptom,syrup,system,table,tackle,tag,tail,talent,talk,tank,tape,target,task,taste,tattoo,taxi,teach,team,tell,ten,tenant,tennis,tent,term,test,text,thank,that,theme,then,theory,there,they,thing,this,thought,three,thrive,throw,thumb,thunder,ticket,tide,tiger,tilt,timber,time,tiny,tip,tired,tissue,title,toast,tobacco,today,toddler,toe,together,toilet,token,tomato,tomorrow,tone,tongue,tonight,tool,tooth,top,topic,topple,torch,tornado,tortoise,toss,total,tourist,toward,tower,town,toy,track,trade,traffic,tragic,train,transfer,trap,trash,travel,tray,treat,tree,trend,trial,tribe,trick,trigger,trim,trip,trophy,trouble,truck,true,truly,trumpet,trust,truth,try,tube,tuition,tumble,tuna,tunnel,turkey,turn,turtle,twelve,twenty,twice,twin,twist,two,type,typical,ugly,umbrella,unable,unaware,uncle,uncover,under,undo,unfair,unfold,unhappy,uniform,unique,unit,universe,unknown,unlock,until,unusual,unveil,update,upgrade,uphold,upon,upper,upset,urban,urge,usage,use,used,useful,useless,usual,utility,vacant,vacuum,vague,valid,valley,valve,van,vanish,vapor,various,vast,vault,vehicle,velvet,vendor,venture,venue,verb,verify,version,very,vessel,veteran,viable,vibrant,vicious,victory,video,view,village,vintage,violin,virtual,virus,visa,visit,visual,vital,vivid,vocal,voice,void,volcano,volume,vote,voyage,wage,wagon,wait,walk,wall,walnut,want,warfare,warm,warrior,wash,wasp,waste,water,wave,way,wealth,weapon,wear,weasel,weather,web,wedding,weekend,weird,welcome,west,wet,whale,what,wheat,wheel,when,where,whip,whisper,wide,width,wife,wild,will,win,window,wine,wing,wink,winner,winter,wire,wisdom,wise,wish,witness,wolf,woman,wonder,wood,wool,word,work,world,worry,worth,wrap,wreck,wrestle,wrist,write,wrong,yard,year,yellow,you,young,youth,zebra,zero,zone,zoo".split(',');
+
+// ═══════════════════════════════════════════════════════════════════
+// BASE58
+// ═══════════════════════════════════════════════════════════════════
+const B58A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function b58decode(str) {
+  const map = {}; for (let i = 0; i < 58; i++) map[B58A[i]] = BigInt(i);
+  let num = 0n;
+  for (const c of str) { if (map[c] === undefined) throw new Error('Bad b58'); num = num * 58n + map[c]; }
+  const bytes = [];
+  while (num > 0n) { bytes.unshift(Number(num % 256n)); num /= 256n; }
+  for (const c of str) { if (c !== '1') break; bytes.unshift(0); }
+  return new Uint8Array(bytes);
+}
+function b58encode(bytes) {
+  let num = 0n;
+  for (const b of bytes) num = num * 256n + BigInt(b);
+  let str = '';
+  while (num > 0n) { str = B58A[Number(num % 58n)] + str; num /= 58n; }
+  for (const b of bytes) { if (b !== 0) break; str = '1' + str; }
+  return str || '1';
+}
+
+// Precomputed program ID bytes
+const MEMO_PROG = b58decode(MEMO_PID);
+const CB_PROG = b58decode(COMPUTE_BUDGET_PID);
+const SYS_PROG = new Uint8Array(32);
+
+// ═══════════════════════════════════════════════════════════════════
+// BYTE HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function compactU16(v) {
+  if (v < 0x80) return new Uint8Array([v]);
+  if (v < 0x4000) return new Uint8Array([v & 0x7f | 0x80, v >> 7]);
+  return new Uint8Array([v & 0x7f | 0x80, (v >> 7) & 0x7f | 0x80, v >> 14]);
+}
+function u32LE(v) { return new Uint8Array([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff]); }
+function u64LE(v) { const b = new Uint8Array(8); let n = v; for (let i = 0; i < 8; i++) { b[i] = n & 0xff; n = Math.floor(n / 256); } return b; }
+function hexFromBytes(b) { return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join(''); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function formatBytes(n) { if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(2) + ' MB'; }
+
+function b64decode(str) {
+  const bin = atob(str); const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function b64encode(bytes) {
+  let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function b64urlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return b64decode(str);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AES-256-GCM (matches hydrate-crypto.js)
+// ═══════════════════════════════════════════════════════════════════
+async function deriveAesKey(password, salt, usage) {
+  const pwHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  const pwHex = hexFromBytes(new Uint8Array(pwHash));
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pwHex), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, [usage]);
+}
+async function encryptPayload(data, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveAesKey(password, salt, 'encrypt');
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data));
+  const out = new Uint8Array(28 + ct.length); out.set(salt, 0); out.set(iv, 16); out.set(ct, 28);
+  return out;
+}
+async function decryptPayload(data, password) {
+  const d = data instanceof Uint8Array ? data : new Uint8Array(data);
+  if (d.byteLength < 29) throw new Error('Encrypted data too short');
+  const key = await deriveAesKey(password, d.slice(0, 16), 'decrypt');
+  try { return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: d.slice(16, 28) }, key, d.slice(28)); }
+  catch { throw new Error('Wrong password or corrupted data'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BIP39 + BIP44 KEY DERIVATION
+// ═══════════════════════════════════════════════════════════════════
+async function entropyToMnemonic(entropy) {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', entropy));
+  const bits = [];
+  for (let i = 0; i < 32; i++) for (let j = 7; j >= 0; j--) bits.push((entropy[i] >> j) & 1);
+  for (let j = 7; j >= 0; j--) bits.push((hash[0] >> j) & 1); // 8-bit checksum
+  const words = [];
+  for (let i = 0; i < 24; i++) { let idx = 0; for (let j = 0; j < 11; j++) idx = (idx << 1) | bits[i * 11 + j]; words.push(BIP39[idx]); }
+  return words.join(' ');
+}
+async function mnemonicToEntropy(phrase) {
+  const words = phrase.trim().toLowerCase().split(/\s+/);
+  if (words.length !== 24) throw new Error('Need exactly 24 words');
+  const indices = words.map(w => { const i = BIP39.indexOf(w); if (i < 0) throw new Error('Unknown word: ' + w); return i; });
+  const bits = [];
+  for (const idx of indices) for (let j = 10; j >= 0; j--) bits.push((idx >> j) & 1);
+  const entropy = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i * 8 + j]; entropy[i] = b; }
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', entropy));
+  let cs = 0; for (let j = 0; j < 8; j++) cs = (cs << 1) | bits[256 + j];
+  if (hash[0] !== cs) throw new Error('Invalid checksum — check your words');
+  return entropy;
+}
+async function hmacSha512(key, data) {
+  const k = key instanceof Uint8Array ? key : new TextEncoder().encode(key);
+  const ck = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', ck, data));
+}
+// BIP44 m/44'/501'/0'/0' — Phantom-compatible Solana derivation
+async function deriveEd25519Seed(mnemonic) {
+  const mnBytes = new TextEncoder().encode(mnemonic.normalize('NFKD'));
+  const salt = new TextEncoder().encode('mnemonic');
+  const km = await crypto.subtle.importKey('raw', mnBytes, 'PBKDF2', false, ['deriveBits']);
+  const seed = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 2048, hash: 'SHA-512' }, km, 512));
+  const master = await hmacSha512('ed25519 seed', seed);
+  let IL = master.slice(0, 32), IR = master.slice(32);
+  for (const index of [0x8000002C, 0x800001F5, 0x80000000, 0x80000000]) {
+    const d = new Uint8Array(37); d[0] = 0; d.set(IL, 1);
+    new DataView(d.buffer).setUint32(33, index, false);
+    const derived = await hmacSha512(IR, d);
+    IL = derived.slice(0, 32); IR = derived.slice(32);
+  }
+  return IL; // 32-byte Ed25519 seed
+}
+async function seedToKeypair(seed32) {
+  const prefix = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+  const pkcs8 = new Uint8Array(48); pkcs8.set(prefix); pkcs8.set(seed32, 16);
+  const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, 'Ed25519', true, ['sign']);
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+  const publicKey = b64urlDecode(jwk.x);
+  return { privateKey, publicKey, address: b58encode(publicKey) };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SOLANA TX BUILDING (manual wire format — no @solana/web3.js)
+// ═══════════════════════════════════════════════════════════════════
+function buildMemoMsg(signerPub, blockhash, memoBytes) {
+  // Accounts: [signer(writable,signed), ComputeBudget(ro), Memo(ro)]
+  const cuLimitData = new Uint8Array([0x02, ...u32LE(CU_LIMIT)]); // 5 bytes
+  const cuPriceData = new Uint8Array([0x03, ...u64LE(CU_PRICE_MICRO)]); // 9 bytes
+  const memoLen = compactU16(memoBytes.length);
+  // Pre-calculate size
+  let sz = 3 + 1 + 96 + 32 + 1; // header + cu16(3) + accounts + blockhash + cu16(3)
+  sz += 1+1+1+5; // IX0: CU limit
+  sz += 1+1+1+9; // IX1: CU price
+  sz += 1+1+1+memoLen.length+memoBytes.length; // IX2: memo
+  const msg = new Uint8Array(sz); let o = 0;
+  msg[o++]=1; msg[o++]=0; msg[o++]=2; // header
+  msg[o++]=3; // numAccounts
+  msg.set(signerPub,o); o+=32; msg.set(CB_PROG,o); o+=32; msg.set(MEMO_PROG,o); o+=32;
+  msg.set(blockhash,o); o+=32;
+  msg[o++]=3; // numInstructions
+  // IX0: setComputeUnitLimit
+  msg[o++]=1; msg[o++]=0; msg[o++]=5; msg.set(cuLimitData,o); o+=5;
+  // IX1: setComputeUnitPrice
+  msg[o++]=1; msg[o++]=0; msg[o++]=9; msg.set(cuPriceData,o); o+=9;
+  // IX2: memo
+  msg[o++]=2; msg[o++]=1; msg[o++]=0; // prog=2, 1 account=[0]
+  msg.set(memoLen,o); o+=memoLen.length; msg.set(memoBytes,o); o+=memoBytes.length;
+  return msg;
+}
+function buildTransferMsg(fromPub, toPub, blockhash, lamports) {
+  const data = new Uint8Array(12);
+  data.set(u32LE(2), 0); // SystemProgram.Transfer = instruction index 2
+  data.set(u64LE(lamports), 4);
+  const msg = new Uint8Array(3+1+96+32+1+1+1+2+1+12); let o = 0;
+  msg[o++]=1; msg[o++]=0; msg[o++]=1; // header: 1 sig, 0 ro-signed, 1 ro-unsigned
+  msg[o++]=3;
+  msg.set(fromPub,o); o+=32; msg.set(toPub,o); o+=32; msg.set(SYS_PROG,o); o+=32;
+  msg.set(blockhash,o); o+=32;
+  msg[o++]=1; // 1 instruction
+  msg[o++]=2; msg[o++]=2; msg[o++]=0; msg[o++]=1; // prog=2, 2 accounts=[0,1]
+  msg[o++]=12; msg.set(data,o);
+  return msg;
+}
+async function signAndSerialize(privateKey, message) {
+  const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', privateKey, message));
+  const tx = new Uint8Array(1 + 64 + message.length);
+  tx[0] = 1; tx.set(sig, 1); tx.set(message, 65);
+  return { tx, sig, sigB58: b58encode(sig) };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RPC HELPERS
+// ═══════════════════════════════════════════════════════════════════
+async function rpcCall(url, method, params) {
+  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({jsonrpc:'2.0',id:1,method,params}) });
+  if (!resp.ok) throw new Error('RPC HTTP ' + resp.status);
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+  return json.result;
+}
+let _bh = null, _bhTime = 0;
+async function getBlockhash(url, force) {
+  if (!force && _bh && Date.now() - _bhTime < BH_MAX_AGE) return _bh;
+  const r = await rpcCall(url, 'getLatestBlockhash', [{ commitment: 'confirmed' }]);
+  _bh = b58decode(r.value.blockhash); _bhTime = Date.now();
+  return _bh;
+}
+async function getBalance(url, addr) {
+  const r = await rpcCall(url, 'getBalance', [addr, { commitment: 'confirmed' }]);
+  return r.value;
+}
+async function sendTx(url, txB64) {
+  return rpcCall(url, 'sendTransaction', [txB64, { encoding:'base64', skipPreflight:true, preflightCommitment:'confirmed' }]);
+}
+async function confirmTx(url, sigB58, timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await sleep(2000);
+    try {
+      const r = await rpcCall(url, 'getSignatureStatuses', [[sigB58]]);
+      const s = r?.value?.[0];
+      if (s) {
+        if (s.err) return false;
+        if (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized') return true;
+      }
+    } catch (e) { console.warn('[confirm]', e.message); }
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// .HYD BLOB + SHREDDING
+// ═══════════════════════════════════════════════════════════════════
+async function buildHydBlob(fileBytes, width, height, password) {
+  const hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', fileBytes));
+  if (!password) {
+    // Mode 3: direct open — 49-byte header + raw file
+    const hdr = new Uint8Array(HEADER_SIZE);
+    hdr[0]=0x48; hdr[1]=0x59; hdr[2]=0x44; hdr[3]=0x01; hdr[4]=3;
+    const dv = new DataView(hdr.buffer);
+    dv.setUint16(5, width, true); dv.setUint16(7, height, true);
+    dv.setUint32(9, 0, true); dv.setUint32(13, fileBytes.length, true);
+    hdr.set(hashBytes, 17);
+    const blob = new Uint8Array(HEADER_SIZE + fileBytes.length);
+    blob.set(hdr); blob.set(fileBytes, HEADER_SIZE);
+    return blob;
+  }
+  // Mode 5: direct encrypted — 5-byte header + encrypted inner payload
+  const inner = new Uint8Array(44 + fileBytes.length);
+  const iv = new DataView(inner.buffer);
+  iv.setUint16(0, width, true); iv.setUint16(2, height, true);
+  iv.setUint32(4, 0, true); iv.setUint32(8, fileBytes.length, true);
+  inner.set(hashBytes, 12); inner.set(fileBytes, 44);
+  const enc = await encryptPayload(inner, password);
+  const blob = new Uint8Array(5 + enc.length);
+  blob[0]=0x48; blob[1]=0x59; blob[2]=0x44; blob[3]=0x01; blob[4]=5;
+  blob.set(enc, 5);
+  return blob;
+}
+function computeManifestHash(blob) {
+  // Synchronous for open mode (reads hash from header)
+  if (blob.length >= 49 && blob[4] % 3 === 0) return 'sha256:' + hexFromBytes(blob.slice(17, 49));
+  return null; // Encrypted — caller must compute SHA-256 async
+}
+async function computeManifestHashAsync(blob) {
+  const sync = computeManifestHash(blob);
+  if (sync) return sync;
+  return 'sha256:' + hexFromBytes(new Uint8Array(await crypto.subtle.digest('SHA-256', blob)));
+}
+function shredBlob(blob, hash) {
+  const hash8 = hash.replace('sha256:', '').slice(0, 8);
+  const chunks = [];
+  for (let off = 0; off < blob.length; off += MEMO_PAYLOAD_SIZE) {
+    const raw = blob.slice(off, Math.min(off + MEMO_PAYLOAD_SIZE, blob.length));
+    const idx = chunks.length;
+    const header = `FD:${hash8}:${String(idx).padStart(2, '0')}:`;
+    chunks.push(new TextEncoder().encode(header + b64encode(raw)));
+  }
+  return chunks;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HYDRATOR (existing logic, updated for v3 FD: chunk format)
+// ═══════════════════════════════════════════════════════════════════
+const sigsEl = document.getElementById('sigs');
+const goBtn = document.getElementById('go');
+const fileInput = document.getElementById('file-input');
+const progEl = document.getElementById('prog');
+const pfill = document.getElementById('pfill');
+const ptext = document.getElementById('ptext');
+const canvas = document.getElementById('canvas');
+const actionsEl = document.getElementById('actions');
+const dlBtn = document.getElementById('dl');
+const verifyEl = document.getElementById('verify');
+const pwGroup = document.getElementById('pw-group');
+const pwInput = document.getElementById('pw');
+const pwGoBtn = document.getElementById('pw-go');
+
+// Hydrate mode tab switching
+let activeHydrateMode = 'sigs';
+document.querySelectorAll('.hydrate-mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.hydrate-mode').forEach(b => { b.classList.remove('active'); b.style.color='var(--muted)'; b.style.borderBottomColor='transparent'; });
+    btn.classList.add('active'); btn.style.color='var(--orange)'; btn.style.borderBottomColor='var(--orange)';
+    document.querySelectorAll('.hydrate-mode-panel').forEach(p => p.classList.add('hidden'));
+    activeHydrateMode = btn.dataset.mode;
+    document.getElementById('mode-' + activeHydrateMode).classList.remove('hidden');
+  });
+});
+// Init active state on first tab
+document.querySelector('.hydrate-mode.active').style.color='var(--orange)';
+document.querySelector('.hydrate-mode.active').style.borderBottomColor='var(--orange)';
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const sigs = Array.isArray(data) ? data : data.signatures;
+      if (!Array.isArray(sigs)) throw new Error('No signatures array');
+      sigsEl.value = JSON.stringify(sigs);
+      if (data.network === 'devnet') document.getElementById('rpc-sel').value = 'https://api.devnet.solana.com';
+    } catch (err) { ptext.textContent = 'Invalid JSON: ' + err.message; progEl.classList.remove('hidden'); }
+  };
+  reader.readAsText(file);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// POINTER LOOKUP — one sig recovers everything
+// ═══════════════════════════════════════════════════════════════════
+async function resolvePointer(pointerSig, rpcUrl) {
+  progress('Fetching pointer memo...', 2);
+  const resp = await fetch(rpcUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getTransaction',params:[pointerSig,{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]})
+  });
+  const json = await resp.json();
+  if (!json.result) throw new Error('Pointer transaction not found. Check the signature and network.');
+  const tx = json.result;
+
+  // Find signer
+  const keys = tx.transaction.message.accountKeys;
+  const signer = (typeof keys[0] === 'string') ? keys[0] : keys[0].pubkey;
+  if (!signer) throw new Error('Could not determine signer from pointer TX');
+
+  // Find pointer memo
+  const allIxs = [...(tx.transaction.message.instructions||[]), ...(tx.meta?.innerInstructions?.flatMap(ii=>ii.instructions)||[])];
+  const memoIx = allIxs.find(ix => (ix.programId === MEMO_PID) || (ix.program === 'spl-memo'));
+  if (!memoIx?.parsed) throw new Error('No memo found in this transaction');
+  const memo = memoIx.parsed;
+  if (!memo.startsWith('FREEZEDRY:3:')) throw new Error('Not a Freeze Dry pointer memo. Got: ' + memo.slice(0, 40));
+
+  // Parse: FREEZEDRY:3:{hash}:{count}:{size}:{chunkSize}:{flags}:{inscriber8}:{lastSig}
+  const parts = memo.split(':');
+  const hash = parts[2] + ':' + parts[3]; // sha256:abcdef...
+  const chunkCount = parseInt(parts[4]);
+  const hash8 = parts[3].slice(0, 8); // first 8 of hex hash
+  progress(`Pointer found: ${chunkCount} chunks, ${hash.slice(0,24)}...`, 5);
+
+  // Search signer's history for chunk memos matching this hash
+  progress(`Scanning ${signer.slice(0,8)}... for ${chunkCount} chunk memos...`, 8);
+  const chunkSigs = [];
+  let beforeSig = undefined;
+  let pages = 0;
+  while (chunkSigs.length < chunkCount && pages < 20) {
+    const params = { limit: 1000, commitment: 'confirmed' };
+    if (beforeSig) params.before = beforeSig;
+    const histResp = await fetch(rpcUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getSignaturesForAddress',params:[signer, params]})
+    });
+    const histJson = await histResp.json();
+    if (!histJson.result || !histJson.result.length) break;
+    for (const entry of histJson.result) {
+      // memo field from RPC: '[123] "FD:hash8:idx:data"' — extract content
+      const memoStr = entry.memo || '';
+      if (memoStr.includes('FD:' + hash8 + ':')) {
+        const fdIdx = memoStr.indexOf('FD:' + hash8 + ':');
+        const rest = memoStr.slice(fdIdx + 3 + hash8.length + 1);
+        const colonPos = rest.indexOf(':');
+        const idxStr = colonPos !== -1 ? rest.slice(0, colonPos) : rest.replace(/[^0-9]/g, '');
+        const idx = parseInt(idxStr);
+        if (!isNaN(idx) && idx < chunkCount) {
+          chunkSigs[idx] = entry.signature;
+        }
+      }
+    }
+    beforeSig = histJson.result[histJson.result.length - 1].signature;
+    pages++;
+    const found = chunkSigs.filter(Boolean).length;
+    progress(`Found ${found}/${chunkCount} chunks (page ${pages})...`, 8 + Math.round((found/chunkCount)*15));
+  }
+
+  const found = chunkSigs.filter(Boolean).length;
+  if (found < chunkCount) throw new Error(`Only found ${found}/${chunkCount} chunk memos. Some may not be confirmed yet.`);
+
+  // Return ordered signatures
+  return chunkSigs;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NFT LOOKUP — read hash from NFT attributes, find pointer, hydrate
+// ═══════════════════════════════════════════════════════════════════
+async function resolveNft(nftAddress, rpcUrl) {
+  progress('Fetching NFT data via DAS...', 2);
+  const dasResp = await fetch(rpcUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getAsset',params:{id:nftAddress}})
+  });
+  const dasJson = await dasResp.json();
+  if (dasJson.error) throw new Error('DAS error: ' + (dasJson.error.message || JSON.stringify(dasJson.error)) + '. NFT lookup requires a DAS-compatible RPC (Helius, Triton).');
+  const asset = dasJson.result;
+  if (!asset) throw new Error('NFT not found. Check the address and network.');
+
+  // Find inscriptionHash in attributes
+  const attrs = asset.content?.metadata?.attributes
+    || asset.plugins?.attributes?.data?.attribute_list
+    || [];
+  const hashAttr = attrs.find(a => a.trait_type === 'inscriptionHash' || a.key === 'inscriptionHash');
+  if (!hashAttr) throw new Error('No inscriptionHash attribute found on this NFT. It may not be a Freeze Dry inscription.');
+  const hash = hashAttr.value;
+  const hash8 = hash.replace('sha256:', '').slice(0, 8);
+  progress(`Found hash: ${hash.slice(0,24)}... — searching for pointer...`, 8);
+
+  // Find the creator/authority to search their history for the pointer
+  const authority = asset.authorities?.find(a => a.scopes?.includes('full'))?.address
+    || asset.creators?.[0]?.address
+    || asset.ownership?.owner;
+  if (!authority) throw new Error('Could not determine inscription authority from NFT');
+
+  // Search authority's history for the pointer memo
+  progress(`Scanning ${authority.slice(0,8)}... for pointer memo...`, 12);
+  let pointerSig = null;
+  let beforeSig = undefined;
+  let pages = 0;
+  while (!pointerSig && pages < 20) {
+    const params = { limit: 1000, commitment: 'confirmed' };
+    if (beforeSig) params.before = beforeSig;
+    const histResp = await fetch(rpcUrl, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getSignaturesForAddress',params:[authority, params]})
+    });
+    const histJson = await histResp.json();
+    if (!histJson.result || !histJson.result.length) break;
+    for (const entry of histJson.result) {
+      // memo field from RPC: '[123] "FREEZEDRY:3:sha256:hash..."'
+      if (entry.memo && entry.memo.includes('FREEZEDRY:3:' + hash)) {
+        pointerSig = entry.signature;
+        break;
+      }
+    }
+    if (pointerSig) break;
+    beforeSig = histJson.result[histJson.result.length - 1].signature;
+    pages++;
+    progress(`Scanning history (page ${pages})...`, 12 + pages);
+  }
+
+  if (!pointerSig) throw new Error('Pointer memo not found for hash ' + hash.slice(0,24) + '... — the inscription authority may differ from the NFT authority.');
+
+  progress('Pointer found — resolving chunks...', 20);
+  return resolvePointer(pointerSig, rpcUrl);
+}
+
+goBtn.addEventListener('click', async () => {
+  if (activeHydrateMode === 'sigs') {
+    return runHydrate();
+  }
+  const rpcUrl = getRpcUrl('rpc-sel', 'rpc');
+  goBtn.disabled = true;
+  try {
+    let sigs;
+    if (activeHydrateMode === 'pointer') {
+      const pSig = document.getElementById('pointer-sig').value.trim();
+      if (!pSig) { progress('Paste a pointer signature.', 0); goBtn.disabled = false; return; }
+      sigs = await resolvePointer(pSig, rpcUrl);
+    } else if (activeHydrateMode === 'nft') {
+      const nAddr = document.getElementById('nft-addr').value.trim();
+      if (!nAddr) { progress('Paste an NFT mint address.', 0); goBtn.disabled = false; return; }
+      sigs = await resolveNft(nAddr, rpcUrl);
+    }
+    // Feed resolved sigs into the standard hydrate flow
+    sigsEl.value = JSON.stringify(sigs);
+    await runHydrate();
+  } catch (err) {
+    progress('Error: ' + err.message, 0); pfill.style.width = '0%';
+    goBtn.disabled = false;
+  }
+});
+
+function progress(text, pct) { progEl.classList.remove('hidden'); pfill.style.width = pct+'%'; ptext.textContent = text; }
+
+// Strip v3 FD: header from memo data, return raw chunk bytes
+function extractMemoChunk(parsed) {
+  if (typeof parsed === 'string' && parsed.startsWith('FD:')) {
+    const c3 = parsed.indexOf(':', parsed.indexOf(':', 3) + 1);
+    if (c3 !== -1) return b64decode(parsed.slice(c3 + 1));
+  }
+  return b64decode(parsed);
+}
+
+async function runHydrate() {
+  let sigs;
+  try { sigs = JSON.parse(sigsEl.value.trim()); if (!Array.isArray(sigs) || !sigs.length) throw 0; }
+  catch { return progress('Invalid input — paste a JSON array of transaction signatures.', 0); }
+  goBtn.disabled = true; canvas.classList.add('hidden'); actionsEl.classList.add('hidden');
+  const rpcUrl = getRpcUrl('rpc-sel', 'rpc');
+  try {
+    progress('Fetching memo transactions...', 2);
+    const parts = []; let useBatch = true;
+    if (useBatch) {
+      try {
+        const BATCH_SIZE = 20; const txResults = new Array(sigs.length).fill(null); let fetched = 0;
+        const testBatch = [{jsonrpc:'2.0',id:0,method:'getTransaction',params:[sigs[0],{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]}];
+        const testResp = await fetch(rpcUrl, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(testBatch)});
+        const testJson = await testResp.json();
+        if (Array.isArray(testJson) && testJson[0]?.result) {
+          txResults[0] = testJson[0].result; fetched = 1;
+          for (let start = 1; start < sigs.length; start += BATCH_SIZE) {
+            const end = Math.min(start + BATCH_SIZE, sigs.length); const batch = [];
+            for (let j = start; j < end; j++) batch.push({jsonrpc:'2.0',id:j-start,method:'getTransaction',params:[sigs[j],{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]});
+            const resp = await fetch(rpcUrl, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(batch)});
+            const results = await resp.json();
+            if (Array.isArray(results)) for (const r of results) { if (r.result) { txResults[start+r.id]=r.result; fetched++; } }
+            progress(`Batch fetch: ${fetched}/${sigs.length}...`, 2+Math.round((fetched/sigs.length)*50));
+            await sleep(500);
+          }
+          for (let i = 0; i < txResults.length; i++) {
+            if (!txResults[i]) throw new Error('Missing chunk '+i);
+            const tx = txResults[i];
+            const allIxs = [...(tx.transaction.message.instructions||[]),...(tx.meta?.innerInstructions?.flatMap(ii=>ii.instructions)||[])];
+            const memoIx = allIxs.find(ix=>(ix.programId===MEMO_PID)||(ix.program==='spl-memo'));
+            if (!memoIx?.parsed) throw new Error('No memo in tx '+i);
+            parts.push(extractMemoChunk(memoIx.parsed));
+          }
+        } else throw new Error('Batch unsupported');
+      } catch { parts.length=0; useBatch=false; progress('Using individual requests...',3); }
+    }
+    if (!useBatch) {
+      const isPublic = rpcUrl.includes('solana.com'); let delay = isPublic ? 5000 : 500; let ok = 0;
+      for (let i = 0; i < sigs.length; i++) {
+        const pct = 2+Math.round((i/sigs.length)*50);
+        const rem = delay*(sigs.length-i)/1000;
+        progress(`Chunk ${i+1}/${sigs.length} (${rem>60?'~'+Math.ceil(rem/60)+'m':'~'+Math.ceil(rem)+'s'})`, pct);
+        let tx = null;
+        for (let att = 0; att < 8; att++) {
+          try {
+            const resp = await fetch(rpcUrl, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getTransaction',params:[sigs[i],{encoding:'jsonParsed',commitment:'confirmed',maxSupportedTransactionVersion:0}]})});
+            if (resp.status===429) { delay=Math.min(delay+2000,10000); ok=0; await sleep(5000*(att+1)); continue; }
+            const json = await resp.json();
+            if (json.result) { tx=json.result; ok++; if (ok>10&&delay>(isPublic?5000:300)) delay=Math.max(delay-500,isPublic?5000:300); break; }
+            if (json.error && (json.error.code===429||json.error.message?.includes('Too many'))) { delay=Math.min(delay+2000,10000); ok=0; await sleep(5000*(att+1)); continue; }
+            if (att<7) await sleep(2000*(att+1));
+          } catch(e) { if(att<7) await sleep(2000*(att+1)); else throw e; }
+        }
+        if (!tx) throw new Error('TX not found: '+sigs[i].slice(0,12)+'...');
+        const allIxs = [...(tx.transaction.message.instructions||[]),...(tx.meta?.innerInstructions?.flatMap(ii=>ii.instructions)||[])];
+        const memoIx = allIxs.find(ix=>(ix.programId===MEMO_PID)||(ix.program==='spl-memo'));
+        if (!memoIx?.parsed) throw new Error('No memo in tx '+i);
+        parts.push(extractMemoChunk(memoIx.parsed));
+        if (i < sigs.length-1) await sleep(delay);
+      }
+    }
+    progress('Reassembling blob...', 55);
+    const totalLen = parts.reduce((s,p)=>s+p.length,0);
+    const blob = new Uint8Array(totalLen); let off = 0;
+    for (const p of parts) { blob.set(p,off); off+=p.length; }
+    if (blob[0]!==0x48||blob[1]!==0x59||blob[2]!==0x44||blob[3]!==0x01) throw new Error('Not a valid .hyd blob');
+    const mode = blob[4]; const isEnc = mode%3!==0;
+    if (isEnc) {
+      progress('Encrypted blob — enter password below.', 55);
+      pwGroup.classList.remove('hidden'); pendingBlob=blob; pendingSigCount=sigs.length;
+      goBtn.disabled=false; return;
+    }
+    await renderBlob(blob, null, sigs.length);
+  } catch(err) { progress('Error: '+err.message,0); pfill.style.width='0%'; } finally { goBtn.disabled=false; }
+}
+
+let pendingBlob=null, pendingSigCount=0;
+pwGoBtn.addEventListener('click', async()=>{
+  if(!pendingBlob)return; const pw=pwInput.value; if(!pw) return progress('Enter password.',55);
+  pwGoBtn.disabled=true;
+  try { await renderBlob(pendingBlob,pw,pendingSigCount); pwGroup.classList.add('hidden'); }
+  catch(e) { progress('Error: '+e.message,0); pfill.style.width='0%'; }
+  finally { pwGoBtn.disabled=false; }
+});
+
+async function renderBlob(blob, password, sigCount) {
+  const mode=blob[4]; const isEnc=mode%3!==0;
+  let width,height,avifLen,deltaLen,expectedHash,avifBytes,fileOrDelta;
+  if (isEnc) {
+    progress('Decrypting...',58);
+    const dec = await decryptPayload(blob.slice(5), password);
+    const p = new Uint8Array(dec); const pv = new DataView(p.buffer);
+    width=pv.getUint16(0,true); height=pv.getUint16(2,true);
+    avifLen=pv.getUint32(4,true); deltaLen=pv.getUint32(8,true);
+    expectedHash=p.slice(12,44); avifBytes=p.slice(44,44+avifLen); fileOrDelta=p.slice(44+avifLen,44+avifLen+deltaLen);
+  } else {
+    if (blob.length<HEADER_SIZE) throw new Error('Blob too small');
+    const v=new DataView(blob.buffer);
+    width=v.getUint16(5,true); height=v.getUint16(7,true);
+    avifLen=v.getUint32(9,true); deltaLen=v.getUint32(13,true);
+    expectedHash=blob.slice(17,49); avifBytes=blob.slice(HEADER_SIZE,HEADER_SIZE+avifLen); fileOrDelta=blob.slice(HEADER_SIZE+avifLen,HEADER_SIZE+avifLen+deltaLen);
+  }
+  let restored, actualHash; const isDirect = avifLen===0;
+  const isRawFile = isDirect && width===0 && height===0;
+  if (isDirect) {
+    const fb=fileOrDelta;
+    actualHash=new Uint8Array(await crypto.subtle.digest('SHA-256',fb));
+    if (isRawFile) {
+      // Raw file (not an image) — offer download
+      progress(`Raw file, ${formatBytes(deltaLen)}`,60);
+      progress('Verifying hash...',80);
+      const hashHex=hexFromBytes(actualHash);
+      verifyEl.textContent='SHA-256: '+hashHex.slice(0,16)+'...'; verifyEl.style.color='var(--sage)';
+      const mLabel=isEnc?'Encrypted':'Direct';
+      progress(`Done! ${mLabel} raw file — ${sigCount} memos — ${formatBytes(deltaLen)} — sha256:${hashHex.slice(0,16)}...`,100);
+      canvas.classList.add('hidden');
+      actionsEl.style.display='flex'; actionsEl.classList.remove('hidden');
+      dlBtn.textContent = 'Download File';
+      dlBtn.onclick=()=>{ const b=new Blob([fb]); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='freezedry-'+hashHex.slice(0,12); a.click(); URL.revokeObjectURL(u); };
+      return;
+    }
+    progress(`${width}x${height} Direct, ${deltaLen}B`,60);
+    progress('Decoding...',80);
+    const fBlob=new Blob([fb]); const fUrl=URL.createObjectURL(fBlob); const img=new Image();
+    await new Promise((ok,no)=>{ img.onload=ok; img.onerror=()=>no(new Error('Cannot decode image')); img.src=fUrl; });
+    const tc=document.createElement('canvas'); tc.width=img.naturalWidth; tc.height=img.naturalHeight;
+    tc.getContext('2d').drawImage(img,0,0); URL.revokeObjectURL(fUrl);
+    const id=tc.getContext('2d').getImageData(0,0,img.naturalWidth,img.naturalHeight);
+    restored=new Uint8Array(id.data.buffer);
+    canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+    canvas.getContext('2d').putImageData(id,0,0);
+  } else {
+    progress(`${width}x${height} AVIF+delta`,60);
+    const avifBlob=new Blob([avifBytes],{type:'image/avif'}); const avifUrl=URL.createObjectURL(avifBlob);
+    const img=new Image();
+    await new Promise((ok,no)=>{ img.onload=ok; img.onerror=()=>no(new Error('AVIF not supported. Chrome 85+.')); img.src=avifUrl; });
+    const tc=document.createElement('canvas'); tc.width=width; tc.height=height;
+    tc.getContext('2d').drawImage(img,0,0,width,height); URL.revokeObjectURL(avifUrl);
+    const lossyPx=new Uint8Array(tc.getContext('2d').getImageData(0,0,width,height).data.buffer);
+    progress('Decompressing delta...',75);
+    if(fileOrDelta[0]===0x52&&fileOrDelta[1]===0x49) throw new Error('Legacy WebP delta. Use freezedry.art.');
+    const ds=new DecompressionStream('gzip'); const wr=ds.writable.getWriter(); wr.write(fileOrDelta); wr.close();
+    const dC=[]; const dr=ds.readable.getReader();
+    while(true){ const{done,value}=await dr.read(); if(done)break; dC.push(value); }
+    const rgbLen=dC.reduce((s,c)=>s+c.byteLength,0); const rgb=new Uint8Array(rgbLen); let ro=0;
+    for(const ch of dC){rgb.set(ch,ro);ro+=ch.byteLength;}
+    const dRGBA=new Uint8Array(width*height*4);
+    for(let i=0,j=0;i<rgb.length;i+=3,j+=4){dRGBA[j]=rgb[i];dRGBA[j+1]=rgb[i+1];dRGBA[j+2]=rgb[i+2];dRGBA[j+3]=0;}
+    progress('Applying delta...',88);
+    restored=new Uint8Array(lossyPx.length);
+    for(let i=0;i<lossyPx.length;i++) restored[i]=(lossyPx[i]+dRGBA[i])&0xFF;
+    actualHash=new Uint8Array(await crypto.subtle.digest('SHA-256',restored));
+    const imageData=new ImageData(new Uint8ClampedArray(restored.buffer),width,height);
+    canvas.width=width; canvas.height=height; canvas.getContext('2d').putImageData(imageData,0,0);
+  }
+  canvas.classList.remove('hidden'); actionsEl.style.display='flex'; actionsEl.classList.remove('hidden');
+  const hashHex=hexFromBytes(actualHash);
+  verifyEl.textContent='SHA-256: '+hashHex.slice(0,16)+'...'; verifyEl.style.color='var(--sage)';
+  const mLabel=isEnc?'Encrypted':(isDirect?'Direct':'Lossless');
+  progress(`Done! ${width}x${height} ${mLabel} — ${sigCount} memos — sha256:${hashHex.slice(0,16)}...`,100);
+  dlBtn.textContent = 'Download PNG';
+  dlBtn.onclick=()=>{ canvas.toBlob(b=>{ const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='freezedry-'+hashHex.slice(0,12)+'.png'; a.click(); URL.revokeObjectURL(u); },'image/png'); };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INSCRIBER ENGINE
+// ═══════════════════════════════════════════════════════════════════
+let wallet = null; // { privateKey, publicKey, address, mnemonic }
+let walletPin = null; // current PIN (kept in memory for re-saves during inscription)
+let selectedFile = null; // { bytes, width, height, name }
+let balancePollId = null;
+let inscribing = false;
+
+function insProgress(text, pct) {
+  const el = document.getElementById('ins-prog'); el.classList.remove('hidden');
+  document.getElementById('ins-pfill').style.width = pct+'%';
+  document.getElementById('ins-ptext').textContent = text;
+}
+
+// Encrypt mnemonic with PIN and save to localStorage
+async function saveMnemonic(mnemonic, pin) {
+  if (!pin) { localStorage.setItem('fd_mnemonic', mnemonic); return; }
+  const data = new TextEncoder().encode(mnemonic);
+  const encrypted = await encryptPayload(data, pin);
+  localStorage.setItem('fd_mnemonic', 'enc:' + b64encode(encrypted));
+}
+
+// Decrypt mnemonic from localStorage with PIN
+async function loadMnemonic(pin) {
+  const stored = localStorage.getItem('fd_mnemonic');
+  if (!stored) return null;
+  if (!stored.startsWith('enc:')) return stored; // legacy unencrypted
+  if (!pin) throw new Error('PIN required');
+  const encrypted = b64decode(stored.slice(4));
+  const decrypted = await decryptPayload(encrypted, pin);
+  return new TextDecoder().decode(decrypted);
+}
+
+function isStoredEncrypted() {
+  const stored = localStorage.getItem('fd_mnemonic');
+  return stored && stored.startsWith('enc:');
+}
+
+async function generateWallet() {
+  const pin = document.getElementById('wallet-pin').value;
+  if (!pin || pin.length < 4) { insProgress('Set a PIN (min 4 characters) to protect your wallet.', 0); return; }
+  const entropy = crypto.getRandomValues(new Uint8Array(32));
+  const mnemonic = await entropyToMnemonic(entropy);
+  const seed = await deriveEd25519Seed(mnemonic);
+  const kp = await seedToKeypair(seed);
+  wallet = { ...kp, mnemonic };
+  walletPin = pin;
+  await saveMnemonic(mnemonic, pin);
+  showWallet();
+}
+
+async function restoreWallet(phrase, pin) {
+  await mnemonicToEntropy(phrase); // validates checksum
+  const seed = await deriveEd25519Seed(phrase);
+  const kp = await seedToKeypair(seed);
+  wallet = { ...kp, mnemonic: phrase };
+  walletPin = pin || document.getElementById('wallet-pin').value || null;
+  if (walletPin && walletPin.length >= 4) {
+    await saveMnemonic(phrase, walletPin);
+  } else {
+    localStorage.setItem('fd_mnemonic', phrase);
+  }
+  showWallet();
+}
+
+function showWallet() {
+  document.getElementById('wallet-empty').classList.add('hidden');
+  document.getElementById('wallet-unlock').classList.add('hidden');
+  document.getElementById('wallet-info').classList.remove('hidden');
+  document.getElementById('wallet-addr').textContent = wallet.address;
+  document.getElementById('seed-words').textContent = wallet.mnemonic;
+  startBalancePoll();
+  updateInscribeBtn();
+  updateTipBtn();
+}
+
+function startBalancePoll() {
+  if (balancePollId) return;
+  pollBalance();
+  balancePollId = setInterval(pollBalance, 5000);
+}
+function stopBalancePoll() { if (balancePollId) { clearInterval(balancePollId); balancePollId = null; } }
+
+async function pollBalance() {
+  if (!wallet) return;
+  const url = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  try {
+    const bal = await getBalance(url, wallet.address);
+    document.getElementById('wallet-bal').textContent = (bal / LAMPORTS_PER_SOL).toFixed(6) + ' SOL';
+    const hint = document.getElementById('fund-hint');
+    if (bal > 0) { hint.textContent = formatBytes(bal) + ' lamports'; hint.style.color = 'var(--sage)'; }
+    else { hint.textContent = 'Send SOL to the address above to begin'; hint.style.color = ''; }
+    updateInscribeBtn();
+  } catch (e) { console.warn('[balance]', e.message); }
+}
+
+function updateInscribeBtn() {
+  const btn = document.getElementById('inscribe-btn');
+  btn.disabled = !wallet || !selectedFile || inscribing;
+}
+
+async function runInscription() {
+  if (inscribing) return;
+  inscribing = true;
+  const btn = document.getElementById('inscribe-btn'); btn.disabled = true;
+  const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  const password = document.getElementById('enc-pw').value || null;
+
+  try {
+    insProgress('Building .hyd blob...', 1);
+    const blob = await buildHydBlob(selectedFile.bytes, selectedFile.width, selectedFile.height, password);
+    const hash = await computeManifestHashAsync(blob);
+    const isOpen = blob[4] % 3 === 0;
+    const chunks = shredBlob(blob, hash);
+    const chunkCount = chunks.length;
+    const estCost = ((chunkCount + 1) * TX_FEE_EST / LAMPORTS_PER_SOL).toFixed(4);
+    insProgress(`${chunkCount} chunks, ~${estCost} SOL. Starting inscription...`, 2);
+
+    // Check for existing checkpoint
+    let checkpoint = null;
+    try { checkpoint = JSON.parse(localStorage.getItem('fd_checkpoint')); } catch {}
+    const signatures = (checkpoint?.hash === hash && checkpoint?.confirmedSigs?.length === chunkCount)
+      ? checkpoint.confirmedSigs : new Array(chunkCount).fill(null);
+    let startIdx = signatures.findIndex(s => s === null);
+    if (startIdx < 0) startIdx = chunkCount;
+    if (startIdx > 0) insProgress(`Resuming from chunk ${startIdx + 1}/${chunkCount}...`, 5);
+
+    const startTime = Date.now();
+    for (let i = startIdx; i < chunkCount; i++) {
+      const bh = await getBlockhash(rpcUrl);
+      const msg = buildMemoMsg(wallet.publicKey, bh, chunks[i]);
+      const { tx, sigB58 } = await signAndSerialize(wallet.privateKey, msg);
+      let confirmed = false;
+      for (let att = 0; att < 3 && !confirmed; att++) {
+        try {
+          await sendTx(rpcUrl, b64encode(tx));
+          confirmed = await confirmTx(rpcUrl, sigB58, 30000);
+          if (!confirmed && att < 2) {
+            // Rebuild with fresh blockhash
+            const bh2 = await getBlockhash(rpcUrl, true);
+            const msg2 = buildMemoMsg(wallet.publicKey, bh2, chunks[i]);
+            const r2 = await signAndSerialize(wallet.privateKey, msg2);
+            await sendTx(rpcUrl, b64encode(r2.tx));
+            confirmed = await confirmTx(rpcUrl, r2.sigB58, 30000);
+            if (confirmed) { signatures[i] = r2.sigB58; break; }
+          }
+        } catch (e) {
+          console.warn(`[inscribe] Chunk ${i} att ${att+1}:`, e.message);
+          await sleep(3000 * (att + 1));
+        }
+      }
+      if (!confirmed) throw new Error(`Chunk ${i} failed after retries. Resume later.`);
+      if (!signatures[i]) signatures[i] = sigB58;
+
+      // Save checkpoint every 5 chunks
+      if (i % 5 === 0 || i === chunkCount - 1) {
+        localStorage.setItem('fd_checkpoint', JSON.stringify({ hash, chunkCount, confirmedSigs: signatures }));
+      }
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+      const tps = ((i - startIdx + 1) / ((Date.now() - startTime) / 1000)).toFixed(1);
+      const pct = 5 + Math.round(((i + 1) / chunkCount) * 85);
+      insProgress(`Chunk ${i+1}/${chunkCount} — ${elapsed}s — ${tps} TPS`, pct);
+    }
+
+    // Pointer memo
+    insProgress('Sending pointer memo...', 92);
+    const lastSig = signatures[chunkCount - 1];
+    const encFlag = isOpen ? 'o' : 'p';
+    const flags = `${encFlag}Ic`;
+    const ins8 = wallet.address.slice(0, 8);
+    const pointerStr = `FREEZEDRY:3:${hash}:${chunkCount}:${blob.length}:600:${flags}:${ins8}:${lastSig}`;
+    const pointerData = new TextEncoder().encode(pointerStr);
+    let pointerSig = null;
+    for (let att = 0; att < 3; att++) {
+      try {
+        const bh = await getBlockhash(rpcUrl, true);
+        const msg = buildMemoMsg(wallet.publicKey, bh, pointerData);
+        const { tx, sigB58 } = await signAndSerialize(wallet.privateKey, msg);
+        await sendTx(rpcUrl, b64encode(tx));
+        if (await confirmTx(rpcUrl, sigB58, 45000)) { pointerSig = sigB58; break; }
+      } catch (e) { console.warn('[pointer] att', att+1, e.message); }
+    }
+
+    insProgress('Inscription complete!', 100);
+    localStorage.removeItem('fd_checkpoint');
+
+    // Show results
+    const rp = document.getElementById('result-panel'); rp.classList.remove('hidden');
+    document.getElementById('result-info').textContent =
+      `${hash.slice(0,24)}... — ${chunkCount} chunks, ${formatBytes(blob.length)}. Pointer: ${pointerSig ? pointerSig.slice(0,12)+'...' : 'failed (chunks safe)'}`;
+    document.getElementById('export-sigs').onclick = () => {
+      const data = JSON.stringify({
+        hash, signatures: signatures.filter(Boolean), pointer: pointerSig,
+        chunkCount, blobSize: blob.length,
+        network: rpcUrl.includes('devnet') ? 'devnet' : 'mainnet-beta',
+        timestamp: new Date().toISOString(),
+      }, null, 2);
+      const b = new Blob([data], { type: 'application/json' });
+      const u = URL.createObjectURL(b); const a = document.createElement('a');
+      a.href = u; a.download = `freezedry-${hash.replace('sha256:','').slice(0,12)}.json`;
+      a.click(); URL.revokeObjectURL(u);
+    };
+    document.getElementById('reclaim-panel').classList.remove('hidden');
+    pollBalance();
+
+  } catch (err) {
+    insProgress('Error: ' + err.message, 0);
+    document.getElementById('ins-pfill').style.width = '0%';
+  } finally {
+    inscribing = false; updateInscribeBtn();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FUND RECLAIM
+// ═══════════════════════════════════════════════════════════════════
+async function reclaimFunds() {
+  const destAddr = document.getElementById('dest-addr').value.trim();
+  if (!destAddr || !wallet) return;
+  let destPub;
+  try { destPub = b58decode(destAddr); if (destPub.length !== 32) throw 0; } catch { return insProgress('Invalid destination address.', 0); }
+  const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  try {
+    insProgress('Reclaiming funds...', 50);
+    const bal = await getBalance(rpcUrl, wallet.address);
+    const transferAmt = bal - 5000; // keep 5000 for TX fee
+    if (transferAmt <= 0) return insProgress('Insufficient balance to reclaim.', 0);
+    const bh = await getBlockhash(rpcUrl, true);
+    const msg = buildTransferMsg(wallet.publicKey, destPub, bh, transferAmt);
+    const { tx, sigB58 } = await signAndSerialize(wallet.privateKey, msg);
+    await sendTx(rpcUrl, b64encode(tx));
+    if (await confirmTx(rpcUrl, sigB58, 30000)) {
+      insProgress(`Reclaimed ${(transferAmt / LAMPORTS_PER_SOL).toFixed(6)} SOL — ${sigB58.slice(0,12)}... — You can now safely clear the wallet.`, 100);
+    } else {
+      insProgress('Reclaim TX sent but not confirmed. Check explorer before clearing wallet.', 50);
+    }
+    pollBalance();
+  } catch (e) { insProgress('Reclaim error: ' + e.message, 0); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UI EVENT HANDLERS
+// ═══════════════════════════════════════════════════════════════════
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// RPC dropdown toggle custom field
+function setupRpcSelect(selId, inputId) {
+  const sel = document.getElementById(selId);
+  const inp = document.getElementById(inputId);
+  sel.addEventListener('change', () => {
+    if (sel.value === 'custom') { inp.classList.remove('hidden'); inp.focus(); }
+    else { inp.classList.add('hidden'); inp.value = ''; }
+  });
+}
+setupRpcSelect('rpc-sel', 'rpc');
+setupRpcSelect('ins-rpc-sel', 'ins-rpc');
+
+function getRpcUrl(selId, inputId) {
+  const sel = document.getElementById(selId);
+  if (sel.value === 'custom') return document.getElementById(inputId).value.trim() || 'https://api.mainnet-beta.solana.com';
+  return sel.value;
+}
+
+// Warn before closing during active inscription
+window.addEventListener('beforeunload', (e) => {
+  if (inscribing) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Wallet address click to copy
+document.getElementById('wallet-addr').addEventListener('click', () => {
+  if (wallet) { navigator.clipboard.writeText(wallet.address).catch(() => {}); insProgress('Address copied!', 0); }
+});
+
+// Copy seed with 60s clipboard auto-clear
+document.getElementById('copy-seed').addEventListener('click', () => {
+  if (!wallet) return;
+  navigator.clipboard.writeText(wallet.mnemonic).then(() => {
+    const btn = document.getElementById('copy-seed');
+    btn.textContent = 'Copied! Clearing in 60s...';
+    setTimeout(() => { navigator.clipboard.writeText('').catch(() => {}); btn.textContent = 'Copy (clears clipboard in 60s)'; }, 60000);
+  }).catch(() => {});
+});
+
+// Clear wallet from browser entirely
+document.getElementById('clear-wallet').addEventListener('click', async () => {
+  if (!wallet) return;
+  const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  try {
+    const bal = await getBalance(rpcUrl, wallet.address);
+    if (bal > 0 && !confirm(`This wallet still has ${(bal / LAMPORTS_PER_SOL).toFixed(6)} SOL. Reclaim funds first — clearing the wallet removes your only way to access them.\n\nClear anyway?`)) return;
+  } catch {}
+  stopBalancePoll();
+  localStorage.removeItem('fd_mnemonic');
+  localStorage.removeItem('fd_checkpoint');
+  wallet = null; walletPin = null; selectedFile = null;
+  document.getElementById('wallet-info').classList.add('hidden');
+  document.getElementById('wallet-empty').classList.remove('hidden');
+  document.getElementById('wallet-pin').value = '';
+  document.getElementById('resume-panel').classList.add('hidden');
+  document.getElementById('result-panel').classList.add('hidden');
+  document.getElementById('reclaim-panel').classList.add('hidden');
+  updateInscribeBtn(); updateTipBtn();
+  insProgress('Wallet cleared from browser.', 0);
+});
+
+// Unlock wallet with PIN (shown on page load when encrypted mnemonic found)
+document.getElementById('unlock-btn').addEventListener('click', async () => {
+  const pin = document.getElementById('unlock-pin').value;
+  if (!pin) { document.getElementById('unlock-err').textContent = 'Enter your PIN.'; return; }
+  try {
+    const mnemonic = await loadMnemonic(pin);
+    if (!mnemonic) throw new Error('No wallet found');
+    await restoreWallet(mnemonic, pin);
+    document.getElementById('unlock-err').textContent = '';
+  } catch (e) {
+    document.getElementById('unlock-err').textContent = e.message === 'Wrong password or corrupted data' ? 'Wrong PIN.' : e.message;
+  }
+});
+
+// Forget wallet entirely from unlock screen
+document.getElementById('forget-btn').addEventListener('click', () => {
+  if (!confirm('This will remove the encrypted wallet from this browser. Without your seed phrase, funds are gone forever.\n\nForget wallet?')) return;
+  localStorage.removeItem('fd_mnemonic');
+  localStorage.removeItem('fd_checkpoint');
+  wallet = null; walletPin = null;
+  document.getElementById('wallet-unlock').classList.add('hidden');
+  document.getElementById('wallet-empty').classList.remove('hidden');
+});
+
+// Generate wallet
+document.getElementById('gen-wallet').addEventListener('click', async () => {
+  if (wallet) {
+    const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+    try {
+      const bal = await getBalance(rpcUrl, wallet.address);
+      if (bal > 0 && !confirm(`Current wallet has ${(bal/LAMPORTS_PER_SOL).toFixed(6)} SOL. Reclaim funds first?`)) return;
+    } catch {}
+  }
+  try { await generateWallet(); } catch (e) { insProgress('Error: ' + e.message, 0); }
+});
+
+// Cycle wallet
+document.getElementById('cycle-wallet').addEventListener('click', async () => {
+  const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  if (wallet) {
+    try {
+      const bal = await getBalance(rpcUrl, wallet.address);
+      if (bal > 0) { alert(`Wallet has ${(bal/LAMPORTS_PER_SOL).toFixed(6)} SOL. Reclaim funds before cycling.`); return; }
+    } catch {}
+  }
+  stopBalancePoll();
+  localStorage.removeItem('fd_mnemonic');
+  wallet = null;
+  document.getElementById('wallet-info').classList.add('hidden');
+  document.getElementById('wallet-empty').classList.remove('hidden');
+  try { await generateWallet(); } catch (e) { insProgress('Error: ' + e.message, 0); }
+});
+
+// PIN field Enter key → generate
+document.getElementById('wallet-pin').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('gen-wallet').click();
+});
+
+// Show/hide restore
+document.getElementById('show-restore').addEventListener('click', () => {
+  document.getElementById('restore-group').classList.toggle('hidden');
+});
+
+// Restore wallet
+document.getElementById('restore-go').addEventListener('click', async () => {
+  const phrase = document.getElementById('restore-phrase').value;
+  const pin = document.getElementById('wallet-pin').value;
+  if (!pin || pin.length < 4) { insProgress('Set a PIN (min 4 characters) before restoring.', 0); return; }
+  try { await restoreWallet(phrase, pin); document.getElementById('restore-group').classList.add('hidden'); }
+  catch (e) { insProgress('Restore failed: ' + e.message, 0); }
+});
+
+// File selection (any file type)
+document.getElementById('art-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const chunkCount = Math.ceil(bytes.length / MEMO_PAYLOAD_SIZE);
+  const cost = ((chunkCount + 1) * TX_FEE_EST / LAMPORTS_PER_SOL).toFixed(4);
+  const cvs = document.getElementById('art-canvas');
+  const isImage = file.type.startsWith('image/');
+
+  if (isImage) {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      selectedFile = { bytes, width: img.naturalWidth, height: img.naturalHeight, name: file.name };
+      URL.revokeObjectURL(url);
+      const ctx = cvs.getContext('2d');
+      const scale = Math.min(1, 200 / img.naturalHeight, 400 / img.naturalWidth);
+      cvs.width = img.naturalWidth * scale; cvs.height = img.naturalHeight * scale;
+      ctx.drawImage(img, 0, 0, cvs.width, cvs.height);
+      cvs.classList.remove('hidden');
+      document.getElementById('art-info').textContent = `${img.naturalWidth}x${img.naturalHeight}, ${formatBytes(bytes.length)}, ~${chunkCount} chunks, ~${cost} SOL`;
+      document.getElementById('art-preview').classList.remove('hidden');
+      updateInscribeBtn();
+    };
+    img.onerror = () => {
+      // Image failed to decode — treat as raw file
+      URL.revokeObjectURL(url);
+      selectedFile = { bytes, width: 0, height: 0, name: file.name };
+      cvs.classList.add('hidden');
+      document.getElementById('art-info').textContent = `${file.name}, ${formatBytes(bytes.length)}, ~${chunkCount} chunks, ~${cost} SOL`;
+      document.getElementById('art-preview').classList.remove('hidden');
+      updateInscribeBtn();
+    };
+    img.src = url;
+  } else {
+    // Non-image file — raw bytes
+    selectedFile = { bytes, width: 0, height: 0, name: file.name };
+    cvs.classList.add('hidden');
+    document.getElementById('art-info').textContent = `${file.name}, ${formatBytes(bytes.length)}, ~${chunkCount} chunks, ~${cost} SOL`;
+    document.getElementById('art-preview').classList.remove('hidden');
+    updateInscribeBtn();
+  }
+});
+
+// Inscribe button
+document.getElementById('inscribe-btn').addEventListener('click', runInscription);
+
+// Reclaim button
+document.getElementById('reclaim-btn').addEventListener('click', reclaimFunds);
+
+// Resume / discard checkpoint
+document.getElementById('resume-btn').addEventListener('click', runInscription);
+document.getElementById('discard-btn').addEventListener('click', () => {
+  localStorage.removeItem('fd_checkpoint');
+  document.getElementById('resume-panel').classList.add('hidden');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TIP FREEZE DRY
+// ═══════════════════════════════════════════════════════════════════
+const TREASURY = 'BujCmW2euJ2f4WRUJz3X6ac9Ci1rtV2H4R4HvnFe3PYa';
+const TIP_LAMPORTS = 10_000_000; // 0.01 SOL
+const tipBtn = document.getElementById('tip-btn');
+const tipStatus = document.getElementById('tip-status');
+
+function updateTipBtn() {
+  tipBtn.disabled = !wallet || inscribing;
+  tipBtn.style.opacity = wallet ? '1' : '0.7';
+}
+
+tipBtn.addEventListener('click', async () => {
+  if (!wallet) return;
+  tipBtn.disabled = true; tipStatus.textContent = 'Sending...';
+  const rpcUrl = getRpcUrl('ins-rpc-sel', 'ins-rpc');
+  try {
+    const bal = await getBalance(rpcUrl, wallet.address);
+    if (bal < TIP_LAMPORTS + 5000) { tipStatus.textContent = 'Not enough SOL'; updateTipBtn(); return; }
+    const bh = await getBlockhash(rpcUrl, true);
+    const destPub = b58decode(TREASURY);
+    const msg = buildTransferMsg(wallet.publicKey, destPub, bh, TIP_LAMPORTS);
+    const { tx, sigB58 } = await signAndSerialize(wallet.privateKey, msg);
+    await sendTx(rpcUrl, b64encode(tx));
+    if (await confirmTx(rpcUrl, sigB58, 30000)) {
+      tipStatus.textContent = 'Thank you! ' + sigB58.slice(0, 8) + '...';
+    } else {
+      tipStatus.textContent = 'Sent! Check explorer.';
+    }
+    pollBalance();
+  } catch (e) { tipStatus.textContent = 'Error: ' + e.message; }
+  finally { updateTipBtn(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+(async function init() {
+  // Check Ed25519 support
+  try {
+    const testKey = await crypto.subtle.generateKey('Ed25519', false, ['sign', 'verify']);
+  } catch {
+    document.getElementById('ed25519-warn').classList.remove('hidden');
+    document.getElementById('wallet-panel').style.opacity = '0.5';
+    document.getElementById('wallet-panel').style.pointerEvents = 'none';
+    return;
+  }
+
+  // Restore wallet from localStorage
+  const saved = localStorage.getItem('fd_mnemonic');
+  if (saved) {
+    if (isStoredEncrypted()) {
+      // Show unlock panel — user must enter PIN
+      document.getElementById('wallet-empty').classList.add('hidden');
+      document.getElementById('wallet-unlock').classList.remove('hidden');
+      // Allow Enter key to unlock
+      document.getElementById('unlock-pin').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('unlock-btn').click();
+      });
+    } else {
+      // Legacy unencrypted — restore directly, then prompt to set PIN
+      try {
+        await restoreWallet(saved);
+        insProgress('Wallet restored. Consider setting a PIN via "New Wallet" for security.', 0);
+      } catch (e) { console.warn('[init] Wallet restore failed:', e.message); }
+    }
+  }
+
+  // Check for inscription checkpoint
+  try {
+    const cp = JSON.parse(localStorage.getItem('fd_checkpoint'));
+    if (cp?.hash && cp?.confirmedSigs) {
+      const done = cp.confirmedSigs.filter(Boolean).length;
+      const rp = document.getElementById('resume-panel'); rp.classList.remove('hidden');
+      document.getElementById('resume-info').textContent =
+        `${cp.hash.slice(0,24)}... — ${done}/${cp.chunkCount} chunks confirmed. Select the same file and click Resume.`;
+    }
+  } catch {}
+})();
+
+})();
+</script>
+</body>
+</html>

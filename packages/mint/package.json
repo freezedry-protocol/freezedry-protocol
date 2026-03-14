@@ -1,0 +1,52 @@
+{
+  "name": "@freezedry/mint",
+  "version": "0.1.0",
+  "description": "Freeze Dry Protocol — Metaplex Core NFT minting with embedded manifest",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "freezedry",
+    "nft",
+    "metaplex",
+    "solana",
+    "on-chain-art"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@metaplex-foundation/mpl-core": "^1.0.0",
+    "@metaplex-foundation/mpl-token-metadata": "^3.0.0",
+    "@metaplex-foundation/umi": "^1.0.0",
+    "@solana/web3.js": "^1.90.0"
+  },
+  "peerDependenciesMeta": {
+    "@metaplex-foundation/mpl-token-metadata": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@metaplex-foundation/mpl-core": "^1.0.0",
+    "@metaplex-foundation/umi": "^1.0.0",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@metaplex-foundation/umi-signer-wallet-adapters": "^1.5.1",
+    "@solana/web3.js": "^1.98.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

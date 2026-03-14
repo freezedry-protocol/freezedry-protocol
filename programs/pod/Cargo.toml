@@ -1,0 +1,21 @@
+[package]
+name = "freezedry-pod"
+version = "0.1.0"
+description = "Freeze Dry Protocol — Proof of Delivery (Ed25519 verified)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "freezedry_pod"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+init-if-needed = []
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }

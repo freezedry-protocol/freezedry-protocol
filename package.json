@@ -1,0 +1,41 @@
+{
+  "name": "freezedry-protocol",
+  "private": true,
+  "workspaces": [
+    "packages/compress",
+    "packages/solana",
+    "packages/mint",
+    "packages/registry",
+    "packages/jobs"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "clean": "npm run clean --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test:sdk": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/*/test/**/*.test.ts'",
+    "test:sdk:compress": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/compress/test/**/*.test.ts'",
+    "test:sdk:solana": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/solana/test/**/*.test.ts'",
+    "test:sdk:jobs": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/jobs/test/**/*.test.ts'",
+    "test:sdk:registry": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/registry/test/**/*.test.ts'",
+    "test:sdk:mint": "TS_NODE_PROJECT=tsconfig.test.json mocha 'packages/mint/test/**/*.test.ts'"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "serialize-javascript": ">=7.0.3"
+  },
+  "devDependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/web3.js": "^1.98.4",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.3.2",
+    "chai": "^6.2.2",
+    "mocha": "^11.3.0",
+    "sharp": "^0.34.5",
+    "ts-mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

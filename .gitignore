@@ -1,0 +1,44 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Anchor / Solana build artifacts
+target/
+.anchor/
+test-ledger/
+keys/
+
+# Secrets — NEVER commit
+.env
+.env.*
+.env.local
+.env*.local
+*-keypair.json
+
+# Cloudflare Workers — operational infrastructure, not protocol
+workers/
+.wrangler/
+
+# Admin/deploy scripts — contain wallet addresses, SSH creds, keypair loading
+scripts/admin-*.ts
+scripts/close-*.ts
+scripts/init-config.*
+scripts/update-fee-split.ts
+scripts/mint-vouchers.ts
+scripts/reclaim-and-redeploy.sh
+scripts/register-nodes.ts
+scripts/devnet-test.ts
+scripts/demo/
+
+# Internal docs — keep local, not for public repo
+docs/integration-scenarios.md
+docs/jobs-v2-integration.md
+NODE-DEPLOYMENT-MODES.md
+
+# Deployment runbook — internal ops
+DEPLOY.md
+
+# CLAUDE files — private project context
+CLAUDE.md
+**/CLAUDE.md
