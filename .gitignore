@@ -9,8 +9,9 @@ target/
 test-ledger/
 keys/
 
-# Pre-commit blocklist — contains actual wallet/IP patterns
+# Pre-commit blocklist and gitleaks config — contain actual wallet/IP patterns
 .githooks/.blocklist
+.gitleaks.toml
 
 # Secrets — NEVER commit
 .env
