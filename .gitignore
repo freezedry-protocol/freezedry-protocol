@@ -18,6 +18,9 @@ keys/
 .env.local
 .env*.local
 *-keypair.json
+*.pem
+secrets/
+credentials.*
 
 # Cloudflare Workers — operational infrastructure, not protocol
 workers/
