@@ -30,4 +30,5 @@ For platforms processing at scale. Create a job with escrow, a community node do
 - [freezedry.art](https://freezedry.art) — Full app with managed infrastructure
 - [Standalone Tool](https://freezedry.art/tools) — Zero-dependency inscriber + hydrator
 - [GitHub: freezedry-node](https://github.com/freezedry-protocol/freezedry-node) — Run your own node
+- [GitHub: freezedry-gallery](https://github.com/freezedry-protocol/freezedry-gallery) — Personal art vault (template)
 - [GitHub: freezedry-protocol](https://github.com/freezedry-protocol/freezedry-protocol) — SDK + Anchor programs
