@@ -47,7 +47,7 @@ curl http://localhost:3100/health
   "status": "ok",
   "indexed": { "artworks": 19, "complete": 19 },
   "peers": 2,
-  "identityPubkey": "Bh174g...",
+  "identityPubkey": "YourIdent...",
   "displayName": "brave-tiger"
 }
 ```
