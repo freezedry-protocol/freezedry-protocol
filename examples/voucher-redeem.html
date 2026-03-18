@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Freeze Dry — Voucher Redemption Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; max-width: 700px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
+    .step { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .step h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #aaa; }
+    .step.active { border-color: #4a9eff; }
+    .step.done { border-color: #2ea043; }
+    label { display: block; font-size: 0.85rem; color: #999; margin-bottom: 0.4rem; }
+    input[type="text"] { width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 0.75rem; }
+    button { padding: 0.6rem 1.2rem; background: #4a9eff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 0.5rem; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #3a8eef; }
+    .stats { font-size: 0.8rem; color: #888; margin-top: 0.5rem; line-height: 1.7; }
+    .stats span { color: #ccc; }
+    .progress { margin-top: 0.5rem; font-size: 0.85rem; color: #4a9eff; min-height: 1.2em; }
+    #error { color: #f85149; font-size: 0.85rem; margin-top: 1rem; }
+    a { color: #4a9eff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: #1a1a1a; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+    .voucher-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-top: 0.75rem; }
+    .voucher-card.active { border-color: #2ea043; }
+    .voucher-card.redeemed { border-color: #888; opacity: 0.6; }
+    .voucher-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .voucher-header h3 { font-size: 0.95rem; }
+    .badge { padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .badge.active { background: #1a3a1a; color: #2ea043; }
+    .badge.redeemed { background: #2a2a2a; color: #888; }
+    .voucher-details { font-size: 0.8rem; color: #888; line-height: 1.6; }
+    .voucher-details span { color: #ccc; }
+    .no-vouchers { color: #888; font-style: italic; padding: 1rem 0; }
+    .confirm-box { background: #111; border: 1px solid #333; border-radius: 6px; padding: 1rem; margin-top: 0.75rem; font-size: 0.85rem; line-height: 1.6; }
+    .confirm-box .label { color: #888; }
+    .confirm-box .value { color: #e0e0e0; }
+    .cost-tier { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 600; }
+    .cost-tier.small { background: #1a2a1a; color: #4ade80; }
+    .cost-tier.medium { background: #2a2a1a; color: #facc15; }
+    .cost-tier.large { background: #2a1a1a; color: #f97316; }
+    .cost-tier.unlimited { background: #1a1a2a; color: #818cf8; }
+  </style>
+</head>
+<body>
+  <h1>Freeze Dry — Voucher Redemption</h1>
+  <p class="subtitle">
+    Connect your wallet to check for Freeze Dry Passes (voucher NFTs).
+    Active passes grant one free inscription through the protocol.
+  </p>
+
+  <!-- Step 1: Connect -->
+  <div class="step active" id="step1">
+    <h2>1. Connect Wallet</h2>
+    <label>RPC Endpoint (needs DAS API support — Helius, Triton, etc.)</label>
+    <input type="text" id="rpcUrl" value="" placeholder="https://mainnet.helius-rpc.com/?api-key=YOUR_KEY">
+    <button id="connectBtn">Connect Wallet</button>
+    <div id="walletStatus" class="stats"></div>
+  </div>
+
+  <!-- Step 2: Scan for vouchers -->
+  <div class="step" id="step2">
+    <h2>2. Your Freeze Dry Passes</h2>
+    <button id="scanBtn" disabled>Scan Wallet</button>
+    <div id="scanProgress" class="progress"></div>
+    <div id="voucherList"></div>
+  </div>
+
+  <!-- Step 3: Redeem -->
+  <div class="step" id="step3">
+    <h2>3. Redeem Pass</h2>
+    <p class="stats">Select an active pass above, then provide the inscription hash to redeem.</p>
+    <label>Inscription Hash (sha256:...)</label>
+    <input type="text" id="inscriptionHash" placeholder="sha256:abc123..." disabled>
+    <label>File Size (KB)</label>
+    <input type="text" id="fileSizeKb" placeholder="e.g. 250" disabled>
+    <div id="confirmBox" class="confirm-box" style="display:none"></div>
+    <button id="signBtn" disabled>Sign Redemption Request</button>
+    <div id="redeemProgress" class="progress"></div>
+    <div id="redeemStats" class="stats"></div>
+  </div>
+
+  <div id="error"></div>
+
+  <script type="module">
+    // ── State ───────────────────────────────────────────────────────────
+    let wallet = null;
+    let vouchers = [];
+    let selectedVoucher = null;
+
+    // Authority wallet that minted the vouchers (update authority)
+    const VOUCHER_AUTHORITY = 'YOUR_VOUCHER_AUTHORITY_WALLET';
+
+    // Redemption API endpoint (your server handles the authority-signed update)
+    // In production, point this to your API: https://freezedry.art/api/voucher/redeem
+    const REDEEM_API = '';
+
+    const $ = (id) => document.getElementById(id);
+    const showError = (msg) => { $('error').textContent = msg; };
+
+    // Cost tier label based on max KB
+    function costTierLabel(maxKb) {
+      if (maxKb === 0) return '<span class="cost-tier unlimited">UNLIMITED</span>';
+      if (maxKb <= 200) return `<span class="cost-tier small">${maxKb} KB (~$2-3)</span>`;
+      if (maxKb <= 500) return `<span class="cost-tier medium">${maxKb} KB (~$5-8)</span>`;
+      return `<span class="cost-tier large">${maxKb} KB (~$10-15)</span>`;
+    }
+
+    // ── Step 1: Connect ─────────────────────────────────────────────────
+    $('connectBtn').onclick = async () => {
+      try {
+        if (!window.solana?.isPhantom) {
+          showError('Phantom wallet not found.');
+          return;
+        }
+        const resp = await window.solana.connect();
+        wallet = window.solana;
+        $('walletStatus').innerHTML = `Connected: <span>${resp.publicKey.toBase58()}</span>`;
+        $('step1').classList.add('done');
+        $('scanBtn').disabled = false;
+        $('step2').classList.add('active');
+        showError('');
+      } catch (e) {
+        showError('Connection failed: ' + e.message);
+      }
+    };
+
+    // ── Step 2: Scan for vouchers ───────────────────────────────────────
+    $('scanBtn').onclick = async () => {
+      const rpcUrl = $('rpcUrl').value;
+      if (!rpcUrl) {
+        showError('RPC URL required (must support DAS API — Helius, Triton, etc.)');
+        return;
+      }
+
+      $('scanProgress').textContent = 'Scanning wallet for Freeze Dry Passes...';
+      $('scanBtn').disabled = true;
+
+      try {
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'getAssetsByOwner',
+            params: {
+              ownerAddress: wallet.publicKey.toBase58(),
+              limit: 100,
+              displayOptions: { showUnverifiedCollections: true },
+            },
+          }),
+        });
+
+        const { result, error } = await resp.json();
+        if (error) throw new Error(error.message || 'DAS API error');
+        if (!result?.items) throw new Error('No assets returned');
+
+        vouchers = [];
+        for (const asset of result.items) {
+          if (asset.interface !== 'MplCoreAsset') continue;
+
+          const onChainAttrs = asset.plugins?.attributes?.data?.attribute_list || [];
+          const typeAttr = onChainAttrs.find(a => a.key === 'type');
+          if (!typeAttr || typeAttr.value !== 'freezedry-inscription-voucher') continue;
+
+          const hasAuthority = asset.authorities?.some(
+            a => a.address === VOUCHER_AUTHORITY && a.scopes?.includes('full')
+          );
+
+          const statusAttr = onChainAttrs.find(a => a.key === 'status');
+          const maxKbAttr = onChainAttrs.find(a => a.key === 'max_blob_kb');
+          const hashAttr = onChainAttrs.find(a => a.key === 'inscription_hash');
+          const redeemedAtAttr = onChainAttrs.find(a => a.key === 'redeemed_at');
+
+          vouchers.push({
+            address: asset.id,
+            name: asset.content?.metadata?.name || 'Freeze Dry Pass',
+            status: statusAttr?.value === 'redeemed' ? 'redeemed' : 'active',
+            maxBlobKb: parseInt(maxKbAttr?.value || '0', 10),
+            inscriptionHash: hashAttr?.value || null,
+            redeemedAt: redeemedAtAttr?.value || null,
+            verified: hasAuthority,
+          });
+        }
+
+        renderVouchers();
+        $('scanProgress').textContent = '';
+        $('scanBtn').disabled = false;
+
+        if (vouchers.some(v => v.status === 'active')) {
+          $('step2').classList.add('done');
+          $('step3').classList.add('active');
+          $('inscriptionHash').disabled = false;
+          $('fileSizeKb').disabled = false;
+        }
+      } catch (e) {
+        showError('Scan failed: ' + e.message);
+        $('scanBtn').disabled = false;
+        $('scanProgress').textContent = '';
+      }
+    };
+
+    function renderVouchers() {
+      const list = $('voucherList');
+      if (vouchers.length === 0) {
+        list.innerHTML = '<div class="no-vouchers">No Freeze Dry Passes found in this wallet.</div>';
+        return;
+      }
+
+      list.innerHTML = vouchers.map((v, i) => `
+        <div class="voucher-card ${v.status}" data-index="${i}"
+             onclick="selectVoucher(${i})" style="cursor:${v.status === 'active' ? 'pointer' : 'default'}">
+          <div class="voucher-header">
+            <h3>${v.name}</h3>
+            <span class="badge ${v.status}">${v.status.toUpperCase()}</span>
+          </div>
+          <div class="voucher-details">
+            Address: <span>${v.address.slice(0, 20)}...</span><br>
+            Covers: ${costTierLabel(v.maxBlobKb)}
+            ${!v.verified ? '<br><em style="color:#f0c040">Unverified authority</em>' : ''}
+            ${v.inscriptionHash ? `<br>Used for: <span>${v.inscriptionHash.slice(0, 24)}...</span>` : ''}
+            ${v.redeemedAt ? `<br>Redeemed: <span>${new Date(parseInt(v.redeemedAt)).toLocaleString()}</span>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.selectVoucher = (index) => {
+      const v = vouchers[index];
+      if (v.status !== 'active') return;
+
+      selectedVoucher = v;
+      $('signBtn').disabled = false;
+
+      document.querySelectorAll('.voucher-card').forEach((el, i) => {
+        el.style.borderColor = i === index ? '#4a9eff' : '#333';
+      });
+
+      updateConfirmBox();
+    };
+
+    function updateConfirmBox() {
+      if (!selectedVoucher) return;
+      const hash = $('inscriptionHash').value.trim();
+      const sizeKb = parseInt($('fileSizeKb').value || '0', 10);
+
+      let sizeWarning = '';
+      if (selectedVoucher.maxBlobKb > 0 && sizeKb > selectedVoucher.maxBlobKb) {
+        sizeWarning = `<br><span style="color:#f85149">File exceeds voucher limit of ${selectedVoucher.maxBlobKb} KB</span>`;
+      }
+
+      $('confirmBox').style.display = 'block';
+      $('confirmBox').innerHTML = `
+        <div class="label">You are redeeming:</div>
+        <div class="value">${selectedVoucher.name} (${selectedVoucher.address.slice(0, 16)}...)</div>
+        <div class="label" style="margin-top:0.5rem">Covers up to:</div>
+        <div class="value">${selectedVoucher.maxBlobKb > 0 ? selectedVoucher.maxBlobKb + ' KB' : 'Unlimited'} of inscription fees</div>
+        ${hash ? `<div class="label" style="margin-top:0.5rem">For inscription:</div><div class="value">${hash.slice(0, 32)}...</div>` : ''}
+        ${sizeKb ? `<div class="label" style="margin-top:0.5rem">Your file:</div><div class="value">${sizeKb} KB</div>` : ''}
+        ${sizeWarning}
+        <div class="label" style="margin-top:0.75rem; color:#aaa">
+          Signing confirms you want to redeem this pass. Your wallet will ask you to sign a message (no transaction fee).
+          The Freeze Dry authority will then update the pass on-chain.
+        </div>
+      `;
+    }
+
+    // Update confirm box when inputs change
+    $('inscriptionHash').addEventListener('input', updateConfirmBox);
+    $('fileSizeKb').addEventListener('input', updateConfirmBox);
+
+    // ── Step 3: Sign + Submit ────────────────────────────────────────────
+    $('signBtn').onclick = async () => {
+      if (!selectedVoucher) return;
+
+      const hash = $('inscriptionHash').value.trim();
+      const sizeKb = parseInt($('fileSizeKb').value || '0', 10);
+      if (!hash) {
+        showError('Provide the inscription hash to redeem against.');
+        return;
+      }
+      if (!sizeKb) {
+        showError('Provide your file size in KB.');
+        return;
+      }
+
+      // Check size limit before signing
+      if (selectedVoucher.maxBlobKb > 0 && sizeKb > selectedVoucher.maxBlobKb) {
+        showError(`File ${sizeKb} KB exceeds this voucher's limit of ${selectedVoucher.maxBlobKb} KB.`);
+        return;
+      }
+
+      $('signBtn').disabled = true;
+      $('redeemProgress').textContent = 'Building redemption message...';
+      showError('');
+
+      try {
+        // Build the message the user signs
+        const message = [
+          'Freeze Dry — Voucher Redemption',
+          '',
+          `Voucher: ${selectedVoucher.address}`,
+          `Inscription: ${hash}`,
+          `File size: ${sizeKb} KB`,
+          '',
+          'By signing this message you confirm you are redeeming',
+          'your Freeze Dry Pass for this inscription.',
+          `Timestamp: ${Date.now()}`,
+        ].join('\n');
+
+        $('redeemProgress').textContent = 'Sign the message in your wallet (no fee)...';
+
+        // Ask user to sign the message (NOT a transaction — just a message)
+        const encodedMessage = new TextEncoder().encode(message);
+        const { signature } = await wallet.signMessage(encodedMessage, 'utf8');
+
+        $('redeemProgress').textContent = 'Sending to redemption server...';
+
+        if (!REDEEM_API) {
+          // Demo mode — show what would be sent to the server
+          $('redeemStats').innerHTML =
+            `<strong>Demo mode</strong> — no redemption API configured.<br><br>` +
+            `In production, this signed request would be sent to your server:<br>` +
+            `<code>POST ${'{REDEEM_API}'}</code><br><br>` +
+            `<span class="label">Voucher:</span> <span>${selectedVoucher.address.slice(0, 20)}...</span><br>` +
+            `<span class="label">Hash:</span> <span>${hash.slice(0, 32)}...</span><br>` +
+            `<span class="label">Size:</span> <span>${sizeKb} KB</span><br>` +
+            `<span class="label">Wallet:</span> <span>${wallet.publicKey.toBase58().slice(0, 20)}...</span><br>` +
+            `<span class="label">Signature:</span> <span>${Array.from(signature.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('')}...</span><br><br>` +
+            `Your server would call <code>verifyRedemptionRequest()</code> then <code>redeemVoucherServer()</code><br>` +
+            `to update the voucher on-chain with your authority keypair.`;
+          $('redeemProgress').textContent = '';
+          $('step3').classList.add('done');
+          return;
+        }
+
+        // Production mode — send to API
+        const resp = await fetch(REDEEM_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voucherAddress: selectedVoucher.address,
+            inscriptionHash: hash,
+            fileSizeKb: sizeKb,
+            userWallet: wallet.publicKey.toBase58(),
+            signature: Array.from(signature),
+            message,
+          }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: resp.statusText }));
+          throw new Error(err.error || 'Redemption failed');
+        }
+
+        const result = await resp.json();
+
+        selectedVoucher.status = 'redeemed';
+        selectedVoucher.inscriptionHash = hash;
+        renderVouchers();
+
+        $('redeemStats').innerHTML =
+          `Pass redeemed! <span>${selectedVoucher.address.slice(0, 20)}...</span><br>` +
+          `Inscription: <span>${hash.slice(0, 32)}...</span><br>` +
+          (result.txSignature ? `TX: <span>${result.txSignature.slice(0, 20)}...</span><br>` : '') +
+          `The pass stays in your wallet as proof of redemption.`;
+        $('redeemProgress').textContent = '';
+        $('step3').classList.add('done');
+      } catch (e) {
+        showError('Redemption failed: ' + e.message);
+        $('signBtn').disabled = false;
+        $('redeemProgress').textContent = '';
+      }
+    };
+  </script>
+</body>
+</html>

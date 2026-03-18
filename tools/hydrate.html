@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Freeze Dry — Standalone Hydrator</title>
+<style>
+  :root { --bg:#1A1714; --surface:#211E1A; --elevated:#2A2520; --text:#F0EBE5; --muted:#8A8278; --orange:#FF6B2C; --sage:#E8B82A; --border:#2E2820; --r:8px; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+  .c{max-width:720px;margin:0 auto;padding:2rem 1.5rem}
+  h1{font-size:1.4rem;margin-bottom:0.25rem}
+  h1 span{color:var(--orange)}
+  .sub{color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+  label{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:0.35rem}
+  textarea,input[type=text],select{width:100%;padding:0.6rem 0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:0.85rem;font-family:monospace;resize:vertical}
+  textarea:focus,input:focus,select:focus{outline:none;border-color:var(--orange)}
+  textarea{min-height:100px}
+  select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A8278'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 0.8rem center}
+  .row{display:flex;gap:0.75rem;margin-top:0.75rem;flex-wrap:wrap;align-items:end}
+  .row .field{flex:1;min-width:200px}
+  .btn{display:inline-block;padding:0.65rem 1.25rem;border-radius:var(--r);font-size:0.9rem;font-weight:600;border:none;cursor:pointer;transition:opacity .2s}
+  .btn:hover{opacity:0.85}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-go{background:var(--sage);color:var(--bg)}
+  .btn-dl{background:var(--elevated);color:var(--text);border:1px solid var(--border)}
+  .btn-file{background:var(--elevated);color:var(--muted);border:1px solid var(--border);font-size:0.8rem;padding:0.5rem 1rem}
+  .progress{margin:1rem 0}
+  .pbar{height:4px;background:var(--elevated);border-radius:2px;overflow:hidden}
+  .pfill{height:100%;width:0%;background:var(--sage);transition:width .3s}
+  .ptext{font-size:0.8rem;color:var(--muted);margin-top:0.4rem}
+  canvas{max-width:100%;border-radius:var(--r);display:block;margin:1rem auto}
+  .hidden{display:none!important}
+  .info{font-size:0.75rem;color:var(--muted);margin-top:0.5rem;line-height:1.5}
+  .or{color:var(--muted);font-size:0.8rem;text-align:center;padding:0.5rem 0}
+  footer{text-align:center;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.75rem}
+  footer a{color:var(--orange);text-decoration:none}
+  @media(max-width:600px){.c{padding:1rem .75rem}.row{flex-direction:column}.btn{width:100%;text-align:center}}
+</style>
+</head>
+<body>
+<div class="c">
+  <h1><span>Freeze Dry</span> — Standalone Hydrator</h1>
+  <p class="sub">Reconstruct art from Solana memos. SHA-256 verified. Zero dependencies. Works offline after fetch.</p>
+
+  <div class="panel">
+    <label for="sigs">Signature JSON (paste array or upload file)</label>
+    <textarea id="sigs" placeholder='["5abc...","2def...", ...]'></textarea>
+    <div class="or">— or —</div>
+    <input type="file" id="file-input" accept=".json" class="btn-file">
+    <div class="row">
+      <div class="field">
+        <label for="network">Network</label>
+        <select id="network">
+          <option value="mainnet" selected>Mainnet</option>
+          <option value="devnet">Devnet</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rpc">RPC Endpoint</label>
+        <input type="text" id="rpc" value="" placeholder="Auto (public RPC) or paste Helius/QuickNode URL">
+      </div>
+      <button id="go" class="btn btn-go">Hydrate from Chain</button>
+    </div>
+    <p class="info">Uses browser-native AVIF decode + gzip decompress. No WASM, no CDN, no servers.<br>
+    Public Solana RPC is slow (~5s/chunk). For faster reads, use a <a href="https://www.helius.dev/" style="color:var(--orange)" target="_blank">Helius</a> or <a href="https://www.quicknode.com/" style="color:var(--orange)" target="_blank">QuickNode</a> RPC URL.<br>
+    Supports v3 (FD: headers), v2, and v1 chunk formats.</p>
+  </div>
+
+  <div id="prog" class="progress hidden">
+    <div class="pbar"><div id="pfill" class="pfill"></div></div>
+    <p id="ptext" class="ptext">Starting...</p>
+  </div>
+
+  <canvas id="canvas" class="hidden"></canvas>
+
+  <div id="actions" class="hidden" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.5rem">
+    <button id="dl" class="btn btn-dl">Download PNG</button>
+    <span id="verify" style="font-size:0.8rem;color:var(--sage);align-self:center"></span>
+  </div>
+
+  <footer>
+    <p>This file is the insurance policy. Save it. It works forever with just a browser and Solana.</p>
+    <p style="margin-top:0.35rem"><a href="https://freezedry.art">freezedry.art</a> — Use the full app for fast inscriptions, NFT minting, and more.</p>
+    <p style="margin-top:0.25rem"><a href="https://github.com/freezedry-protocol/freezedry-protocol">Freeze Dry Protocol</a> — MIT License</p>
+  </footer>
+</div>
+
+<script>
+// Freeze Dry Standalone Hydrator — ZERO external dependencies
+// Reconstructs .hyd blobs from Solana memo transactions using only browser APIs
+// Supports v3 (FD: self-identifying headers), v2, and v1 chunk formats
+(function() {
+  const MEMO_PID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+  const HEADER_SIZE = 49; // magic(4)+mode(1)+w(2)+h(2)+avifLen(4)+deltaLen(4)+hash(32)
+
+  const PUBLIC_RPC = {
+    mainnet: 'https://api.mainnet-beta.solana.com',
+    devnet: 'https://api.devnet.solana.com',
+  };
+
+  const sigsEl = document.getElementById('sigs');
+  const rpcEl = document.getElementById('rpc');
+  const networkEl = document.getElementById('network');
+  const goBtn = document.getElementById('go');
+  const fileInput = document.getElementById('file-input');
+  const progEl = document.getElementById('prog');
+  const pfill = document.getElementById('pfill');
+  const ptext = document.getElementById('ptext');
+  const canvas = document.getElementById('canvas');
+  const actionsEl = document.getElementById('actions');
+  const dlBtn = document.getElementById('dl');
+  const verifyEl = document.getElementById('verify');
+
+  // File upload fills the textarea
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        // Accept { signatures: [...], network: '...' } or plain [...]
+        const sigs = Array.isArray(data) ? data : data.signatures;
+        if (!Array.isArray(sigs)) throw new Error('No signatures array found');
+        sigsEl.value = JSON.stringify(sigs);
+        if (data.network === 'devnet') networkEl.value = 'devnet';
+        if (data.network === 'mainnet') networkEl.value = 'mainnet';
+        if (data.rpc) rpcEl.value = data.rpc;
+      } catch (err) {
+        ptext.textContent = 'Invalid JSON file: ' + err.message;
+        progEl.classList.remove('hidden');
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  goBtn.addEventListener('click', run);
+
+  function progress(text, pct) {
+    progEl.classList.remove('hidden');
+    pfill.style.width = pct + '%';
+    ptext.textContent = text;
+  }
+
+  function b64decode(str) {
+    const bin = atob(str);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  /** Strip v3 header (FD:{hash8}:{index}:) from memo text, returning base64 payload */
+  function stripV3Header(str) {
+    if (str.startsWith('FD:')) {
+      const thirdColon = str.indexOf(':', str.indexOf(':', 3) + 1);
+      if (thirdColon !== -1) return str.slice(thirdColon + 1);
+    }
+    return str;
+  }
+
+  /** Extract base64 chunk data from memo text — handles v3 headers and plain base64 */
+  function extractChunkData(memoText) {
+    const stripped = stripV3Header(memoText);
+    return b64decode(stripped);
+  }
+
+  async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function getRpcUrl() {
+    const custom = rpcEl.value.trim();
+    if (custom) return custom;
+    return PUBLIC_RPC[networkEl.value] || PUBLIC_RPC.mainnet;
+  }
+
+  async function run() {
+    // Parse signatures
+    let sigs;
+    try {
+      sigs = JSON.parse(sigsEl.value.trim());
+      if (!Array.isArray(sigs) || sigs.length === 0) throw new Error();
+    } catch {
+      return progress('Invalid input — paste a JSON array of transaction signatures.', 0);
+    }
+
+    goBtn.disabled = true;
+    canvas.classList.add('hidden');
+    actionsEl.classList.add('hidden');
+    const rpcUrl = getRpcUrl();
+
+    try {
+      // Step 1: Fetch memo data — tries batch first (fast on paid RPCs),
+      // falls back to individual requests with adaptive pacing (works everywhere)
+      progress('Fetching memo transactions...', 2);
+      const parts = [];
+      let useBatch = true;
+
+      // --- Attempt batched fetch ---
+      if (useBatch) {
+        try {
+          progress('Trying batch fetch...', 3);
+          const BATCH_SIZE = 20;
+          const txResults = new Array(sigs.length).fill(null);
+          let fetched = 0;
+
+          const testBatch = [{ jsonrpc:'2.0', id:0, method:'getTransaction',
+            params:[sigs[0], { encoding:'jsonParsed', commitment:'confirmed', maxSupportedTransactionVersion:0 }]
+          }];
+          const testResp = await fetch(rpcUrl, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(testBatch)
+          });
+          const testJson = await testResp.json();
+
+          if (Array.isArray(testJson) && testJson[0]?.result) {
+            txResults[0] = testJson[0].result;
+            fetched = 1;
+
+            for (let start = 1; start < sigs.length; start += BATCH_SIZE) {
+              const end = Math.min(start + BATCH_SIZE, sigs.length);
+              const batch = [];
+              for (let j = start; j < end; j++) {
+                batch.push({ jsonrpc:'2.0', id:j-start, method:'getTransaction',
+                  params:[sigs[j], { encoding:'jsonParsed', commitment:'confirmed', maxSupportedTransactionVersion:0 }]
+                });
+              }
+              const resp = await fetch(rpcUrl, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(batch)
+              });
+              const results = await resp.json();
+              if (Array.isArray(results)) {
+                for (const r of results) {
+                  if (r.result) { txResults[start + r.id] = r.result; fetched++; }
+                }
+              }
+              const pct = 2 + Math.round((fetched / sigs.length) * 50);
+              progress(`Batch fetch: ${fetched}/${sigs.length}...`, pct);
+              await sleep(500);
+            }
+
+            for (let i = 0; i < txResults.length; i++) {
+              if (!txResults[i]) throw new Error(`Missing chunk ${i} — switching to individual fetch`);
+              const tx = txResults[i];
+              const allIxs = [...(tx.transaction.message.instructions || []),
+                ...(tx.meta?.innerInstructions?.flatMap(inner => inner.instructions) || [])];
+              const memoIx = allIxs.find(ix => (ix.programId === MEMO_PID) || (ix.program === 'spl-memo'));
+              if (!memoIx?.parsed) throw new Error(`No memo in tx ${i}`);
+              parts.push(extractChunkData(memoIx.parsed));
+            }
+          } else {
+            throw new Error('Batch not supported');
+          }
+        } catch (batchErr) {
+          parts.length = 0;
+          useBatch = false;
+          progress('Batch not supported on this RPC — using individual requests...', 3);
+        }
+      }
+
+      // --- Fallback: individual requests with adaptive pacing ---
+      if (!useBatch) {
+        const isPublicRpc = rpcUrl.includes('solana.com');
+        let delay = isPublicRpc ? 5000 : 500;
+        let consecutiveOk = 0;
+        for (let i = 0; i < sigs.length; i++) {
+          const pct = 2 + Math.round((i / sigs.length) * 50);
+          const remaining = delay * (sigs.length - i) / 1000;
+          const etaStr = remaining > 60 ? `~${Math.ceil(remaining/60)}m remaining` : `~${Math.ceil(remaining)}s remaining`;
+          progress(`Fetching chunk ${i + 1}/${sigs.length} (${etaStr})`, pct);
+
+          let tx = null;
+          for (let attempt = 0; attempt < 8; attempt++) {
+            try {
+              const resp = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0', id: 1,
+                  method: 'getTransaction',
+                  params: [sigs[i], { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 }]
+                })
+              });
+              if (resp.status === 429) {
+                delay = Math.min(delay + 2000, 10000);
+                consecutiveOk = 0;
+                progress(`Rate limited — pacing to ${(delay/1000).toFixed(0)}s/req (chunk ${i + 1})`, pct);
+                await sleep(5000 * (attempt + 1));
+                continue;
+              }
+              const json = await resp.json();
+              if (json.result) {
+                tx = json.result;
+                consecutiveOk++;
+                if (consecutiveOk > 10 && delay > (isPublicRpc ? 5000 : 300)) {
+                  delay = Math.max(delay - 500, isPublicRpc ? 5000 : 300);
+                }
+                break;
+              }
+              if (json.error && (json.error.code === 429 || json.error.message?.includes('Too many'))) {
+                delay = Math.min(delay + 2000, 10000);
+                consecutiveOk = 0;
+                await sleep(5000 * (attempt + 1));
+                continue;
+              }
+              if (!json.result && attempt < 7) {
+                await sleep(2000 * (attempt + 1));
+                continue;
+              }
+            } catch (err) {
+              if (attempt < 7) { await sleep(2000 * (attempt + 1)); } else { throw err; }
+            }
+          }
+          if (!tx) throw new Error(`Transaction not found: ${sigs[i].slice(0, 12)}...`);
+
+          const allIxs = [
+            ...(tx.transaction.message.instructions || []),
+            ...(tx.meta?.innerInstructions?.flatMap(inner => inner.instructions) || [])
+          ];
+          const memoIx = allIxs.find(ix =>
+            (ix.programId === MEMO_PID) || (ix.program === 'spl-memo')
+          );
+          if (!memoIx || !memoIx.parsed) throw new Error(`No memo in tx ${i}: ${sigs[i].slice(0, 12)}`);
+          parts.push(extractChunkData(memoIx.parsed));
+
+          if (i < sigs.length - 1) await sleep(delay);
+        }
+      }
+
+      // Step 2: Reassemble .hyd blob
+      progress('Reassembling blob...', 55);
+      const totalLen = parts.reduce((s, p) => s + p.length, 0);
+      const blob = new Uint8Array(totalLen);
+      let off = 0;
+      for (const p of parts) { blob.set(p, off); off += p.length; }
+
+      // Step 3: Parse .hyd header
+      if (blob[0] !== 0x48 || blob[1] !== 0x59 || blob[2] !== 0x44 || blob[3] !== 0x01) {
+        throw new Error('Not a valid .hyd blob — bad magic bytes');
+      }
+      const mode = blob[4];
+      const isEncrypted = (mode % 3) !== 0;
+      if (isEncrypted) throw new Error(`Encrypted blob (mode ${mode}). Use a Freeze Dry app with decryption support.`);
+      if (blob.length < HEADER_SIZE) throw new Error('Blob too small — corrupted header');
+
+      const isDirect = mode >= 3;
+      const view = new DataView(blob.buffer);
+      const width = view.getUint16(5, true);
+      const height = view.getUint16(7, true);
+      const avifLen = view.getUint32(9, true);
+      const deltaLen = view.getUint32(13, true);
+      const expectedHash = blob.slice(17, 49);
+
+      let restored, actualHash;
+
+      if (isDirect) {
+        // Direct Store: file bytes stored in delta slot, no AVIF
+        progress(`Parsed: ${width}x${height}, Direct Store, ${deltaLen}B`, 58);
+        const fileBytes = blob.slice(HEADER_SIZE, HEADER_SIZE + deltaLen);
+
+        progress('Computing SHA-256...', 65);
+        const hashBuf = await crypto.subtle.digest('SHA-256', fileBytes);
+        actualHash = new Uint8Array(hashBuf);
+
+        progress('Decoding original file...', 80);
+        const fileBlob = new Blob([fileBytes]);
+        const fileUrl = URL.createObjectURL(fileBlob);
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Browser cannot decode this image format.'));
+          img.src = fileUrl;
+        });
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = img.naturalWidth;
+        tmpCanvas.height = img.naturalHeight;
+        const tmpCtx = tmpCanvas.getContext('2d');
+        tmpCtx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(fileUrl);
+        const imgData = tmpCtx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+        restored = new Uint8Array(imgData.data.buffer);
+
+        progress('Rendering...', 95);
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').putImageData(imgData, 0, 0);
+
+      } else {
+        // Lossless: AVIF + delta reconstruction
+        const avifBytes = blob.slice(HEADER_SIZE, HEADER_SIZE + avifLen);
+        const compDelta = blob.slice(HEADER_SIZE + avifLen, HEADER_SIZE + avifLen + deltaLen);
+
+        progress(`Parsed: ${width}x${height}, AVIF ${avifLen}B, delta ${deltaLen}B`, 58);
+
+        progress('Decoding AVIF (browser-native)...', 60);
+        const avifBlob = new Blob([avifBytes], { type: 'image/avif' });
+        const avifUrl = URL.createObjectURL(avifBlob);
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Browser cannot decode AVIF. Use Chrome 85+, Firefox 93+, or Safari 16.4+.'));
+          img.src = avifUrl;
+        });
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = width;
+        tmpCanvas.height = height;
+        const tmpCtx = tmpCanvas.getContext('2d');
+        tmpCtx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(avifUrl);
+        const lossyData = tmpCtx.getImageData(0, 0, width, height);
+        const lossyPixels = new Uint8Array(lossyData.data.buffer);
+
+        progress('Decompressing delta (gzip)...', 72);
+        const ds = new DecompressionStream('gzip');
+        const writer = ds.writable.getWriter();
+        writer.write(compDelta);
+        writer.close();
+        const chunks = [];
+        const reader = ds.readable.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+        const rgbLen = chunks.reduce((s, c) => s + c.byteLength, 0);
+        const rgb = new Uint8Array(rgbLen);
+        let rgbOff = 0;
+        for (const ch of chunks) { rgb.set(ch, rgbOff); rgbOff += ch.byteLength; }
+
+        const pixelCount = width * height;
+        const deltaRGBA = new Uint8Array(pixelCount * 4);
+        for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) {
+          deltaRGBA[j]     = rgb[i];
+          deltaRGBA[j + 1] = rgb[i + 1];
+          deltaRGBA[j + 2] = rgb[i + 2];
+          deltaRGBA[j + 3] = 0;
+        }
+
+        progress('Applying delta corrections...', 85);
+        restored = new Uint8Array(lossyPixels.length);
+        for (let i = 0; i < lossyPixels.length; i++) {
+          restored[i] = (lossyPixels[i] + deltaRGBA[i]) & 0xFF;
+        }
+
+        progress('Computing SHA-256...', 92);
+        const hashBuf = await crypto.subtle.digest('SHA-256', restored);
+        actualHash = new Uint8Array(hashBuf);
+
+        progress('Rendering...', 98);
+        const imageData = new ImageData(new Uint8ClampedArray(restored.buffer), width, height);
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').putImageData(imageData, 0, 0);
+      }
+
+      canvas.classList.remove('hidden');
+      actionsEl.style.display = 'flex';
+      actionsEl.classList.remove('hidden');
+      const hashHex = Array.from(actualHash).map(b => b.toString(16).padStart(2, '0')).join('');
+      verifyEl.textContent = `SHA-256: ${hashHex.slice(0, 16)}...`;
+      verifyEl.style.color = 'var(--sage)';
+
+      progress(`Done! ${width}x${height} — ${sigs.length} memos — sha256:${hashHex.slice(0, 16)}...`, 100);
+
+      dlBtn.onclick = () => {
+        canvas.toBlob((b) => {
+          const url = URL.createObjectURL(b);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `freezedry-${hashHex.slice(0, 12)}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      };
+
+    } catch (err) {
+      progress('Error: ' + err.message, 0);
+      pfill.style.width = '0%';
+    } finally {
+      goBtn.disabled = false;
+    }
+  }
+})();
+</script>
+</body>
+</html>

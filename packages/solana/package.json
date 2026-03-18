@@ -1,0 +1,48 @@
+{
+  "name": "@freezedry/solana",
+  "version": "0.1.0",
+  "description": "Freeze Dry Protocol — Solana memo storage (shred, inscribe, fetch)",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freezedry-protocol/freezedry-protocol.git",
+    "directory": "packages/solana"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "freezedry",
+    "solana",
+    "memo",
+    "on-chain",
+    "blockchain-storage"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@solana/web3.js": "^1.90.0"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

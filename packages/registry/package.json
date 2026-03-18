@@ -1,0 +1,49 @@
+{
+  "name": "@freezedry/registry",
+  "version": "0.1.0",
+  "description": "Freeze Dry Protocol — Solana on-chain node registry client",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freezedry-protocol/freezedry-protocol.git",
+    "directory": "packages/registry"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "freezedry",
+    "solana",
+    "node-registry",
+    "pda",
+    "on-chain"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@solana/web3.js": "^1.90.0"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.98.0",
+    "@coral-xyz/anchor": "^0.30.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Freeze Dry — Inscribe Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 2rem; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
+    .step { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .step h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #aaa; }
+    .step.active { border-color: #4a9eff; }
+    .step.done { border-color: #2ea043; }
+    label { display: block; font-size: 0.85rem; color: #999; margin-bottom: 0.4rem; }
+    input[type="text"], input[type="file"], select { width: 100%; padding: 0.5rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 0.75rem; }
+    button { padding: 0.6rem 1.2rem; background: #4a9eff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #3a8eef; }
+    .stats { font-size: 0.8rem; color: #888; margin-top: 0.5rem; line-height: 1.6; }
+    .stats span { color: #ccc; }
+    #progress { margin-top: 0.5rem; font-size: 0.85rem; color: #4a9eff; min-height: 1.2em; }
+    #error { color: #f85149; font-size: 0.85rem; margin-top: 0.5rem; }
+    .preview { max-width: 300px; max-height: 300px; border-radius: 4px; margin-top: 0.75rem; display: none; }
+    .row { display: flex; gap: 1rem; align-items: flex-start; }
+    .row > div { flex: 1; }
+    a { color: #4a9eff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .hidden { display: none; }
+    code { background: #1a1a1a; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Freeze Dry Protocol — Inscribe Demo</h1>
+  <p class="subtitle">
+    Wrap a file, inscribe it to Solana memos, and hydrate it back. Uses
+    <code>@freezedry/compress</code> + <code>@freezedry/solana</code> SDK packages.
+    <a href="https://github.com/freezedry-protocol/freezedry-protocol" target="_blank">View source</a>
+  </p>
+
+  <!-- Step 1: Config -->
+  <div class="step active" id="step1">
+    <h2>1. Connect</h2>
+    <label>RPC Endpoint</label>
+    <input type="text" id="rpcUrl" value="https://api.devnet.solana.com" placeholder="https://your-rpc.com">
+    <label>Network</label>
+    <select id="network">
+      <option value="devnet" selected>Devnet (free testing)</option>
+      <option value="mainnet-beta">Mainnet</option>
+    </select>
+    <button id="connectBtn">Connect Wallet</button>
+    <div id="walletStatus" class="stats"></div>
+  </div>
+
+  <!-- Step 2: Upload -->
+  <div class="step" id="step2">
+    <h2>2. Choose File</h2>
+    <input type="file" id="fileInput" disabled>
+    <img id="previewImg" class="preview" alt="Preview">
+    <div id="fileStats" class="stats"></div>
+  </div>
+
+  <!-- Step 3: Wrap -->
+  <div class="step" id="step3">
+    <h2>3. Wrap (Freeze Dry)</h2>
+    <button id="compressBtn" disabled>Wrap File</button>
+    <div id="progress"></div>
+    <div id="compressStats" class="stats"></div>
+  </div>
+
+  <!-- Step 4: Inscribe -->
+  <div class="step" id="step4">
+    <h2>4. Inscribe to Solana</h2>
+    <button id="inscribeBtn" disabled>Sign & Inscribe</button>
+    <div id="inscribeProgress"></div>
+    <div id="inscribeStats" class="stats"></div>
+  </div>
+
+  <!-- Step 5: Hydrate -->
+  <div class="step" id="step5">
+    <h2>5. Hydrate from Chain</h2>
+    <button id="hydrateBtn" disabled>Reconstruct from Chain</button>
+    <div id="hydrateProgress"></div>
+    <div id="hydrateStats" class="stats"></div>
+  </div>
+
+  <div id="error"></div>
+
+  <script type="module">
+    // ── SDK imports via esm.sh (zero build step) ────────────────────────
+    // Pin versions to avoid breaking changes
+    const compressMod = await import('https://esm.sh/@freezedry/compress@0.1.0?bundle');
+    const solanaMod = await import('https://esm.sh/@freezedry/solana@0.1.0?bundle');
+    const web3 = await import('https://esm.sh/@solana/web3.js@1.98.0?bundle');
+
+    const { sha256 } = compressMod;
+    const { shred, buildMemoTxs, buildPointerMemo, confirmBatch, fetchBlob, estimateCost } = solanaMod;
+    const { Connection, Transaction, PublicKey } = web3;
+
+    // ── State ───────────────────────────────────────────────────────────
+    let wallet = null;
+    let fileBytes = null;
+    let fileName = null;
+    let blob = null;
+    let manifestHash = null;
+    let signatures = [];
+
+    const $ = (id) => document.getElementById(id);
+
+    // ── Step 1: Connect wallet ──────────────────────────────────────────
+    $('connectBtn').onclick = async () => {
+      try {
+        if (!window.solana?.isPhantom) {
+          showError('Phantom wallet not found. Install it at phantom.app');
+          return;
+        }
+        const resp = await window.solana.connect();
+        wallet = window.solana;
+        $('walletStatus').innerHTML = `Connected: <span>${resp.publicKey.toBase58()}</span>`;
+        $('step1').classList.add('done');
+        $('fileInput').disabled = false;
+        $('step2').classList.add('active');
+        showError('');
+      } catch (e) {
+        showError('Wallet connection failed: ' + e.message);
+      }
+    };
+
+    // ── Step 2: File upload ─────────────────────────────────────────────
+    $('fileInput').onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const buf = await file.arrayBuffer();
+      fileBytes = new Uint8Array(buf);
+      fileName = file.name;
+
+      // Show preview if image
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        $('previewImg').src = url;
+        $('previewImg').style.display = 'block';
+      } else {
+        $('previewImg').style.display = 'none';
+      }
+
+      const sizeKB = (fileBytes.byteLength / 1024).toFixed(1);
+      $('fileStats').innerHTML = `<span>${sizeKB} KB</span>, <span>${file.name}</span>`;
+      $('step2').classList.add('done');
+      $('compressBtn').disabled = false;
+      $('step3').classList.add('active');
+    };
+
+    // ── Step 3: Wrap into .hyd blob (Direct mode) ──────────────────────
+    $('compressBtn').onclick = async () => {
+      try {
+        $('compressBtn').disabled = true;
+        $('progress').textContent = 'Building .hyd blob...';
+
+        // Build direct mode blob: 49-byte header + raw file bytes
+        const HEADER_SIZE = 49;
+        const hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', fileBytes));
+        const hdr = new Uint8Array(HEADER_SIZE);
+        hdr[0]=0x48; hdr[1]=0x59; hdr[2]=0x44; hdr[3]=0x01; hdr[4]=3; // HYD\x01, mode 3 (direct open)
+        const dv = new DataView(hdr.buffer);
+        dv.setUint16(5, 0, true);  // width=0 (any file type)
+        dv.setUint16(7, 0, true);  // height=0
+        dv.setUint32(9, 0, true);  // reserved
+        dv.setUint32(13, fileBytes.length, true); // file length
+        hdr.set(hashBytes, 17);
+
+        blob = new Uint8Array(HEADER_SIZE + fileBytes.length);
+        blob.set(hdr);
+        blob.set(fileBytes, HEADER_SIZE);
+
+        // Hash the blob for manifest
+        const blobHash = new Uint8Array(await crypto.subtle.digest('SHA-256', fileBytes));
+        manifestHash = 'sha256:' + Array.from(blobHash).map(b => b.toString(16).padStart(2,'0')).join('');
+
+        const cost = estimateCost(blob.byteLength);
+        $('compressStats').innerHTML = `
+          Blob: <span>${(blob.byteLength / 1024).toFixed(1)} KB</span>
+          (49B header + ${(fileBytes.byteLength / 1024).toFixed(1)} KB file)<br>
+          Hash: <span>${manifestHash.slice(0, 24)}...</span><br>
+          Chunks: <span>${cost.chunks}</span> memo TXs,
+          estimated <span>~${cost.sol.toFixed(6)} SOL</span>
+        `;
+        $('progress').textContent = 'Wrapped.';
+        $('step3').classList.add('done');
+        $('inscribeBtn').disabled = false;
+        $('step4').classList.add('active');
+      } catch (e) {
+        showError('Wrap failed: ' + e.message);
+        $('compressBtn').disabled = false;
+      }
+    };
+
+    // ── Step 4: Inscribe ────────────────────────────────────────────────
+    $('inscribeBtn').onclick = async () => {
+      try {
+        $('inscribeBtn').disabled = true;
+        const rpcUrl = $('rpcUrl').value;
+        const conn = new Connection(rpcUrl, 'confirmed');
+
+        $('inscribeProgress').textContent = 'Shredding blob...';
+        const chunks = shred(blob);
+
+        $('inscribeProgress').textContent = 'Building transactions...';
+        const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+
+        const txs = buildMemoTxs(chunks.chunks || chunks, {
+          payer: new PublicKey(wallet.publicKey.toBase58()),
+          blockhash,
+          manifestHash: manifestHash.replace('sha256:', ''),
+        });
+
+        $('inscribeProgress').textContent = `Signing ${txs.length} transactions (approve in wallet)...`;
+
+        // Sign in batches of 10
+        const batchSize = 10;
+        signatures = [];
+        for (let i = 0; i < txs.length; i += batchSize) {
+          const batch = txs.slice(i, i + batchSize);
+          const signed = await wallet.signAllTransactions(batch);
+          for (const tx of signed) {
+            const sig = await conn.sendRawTransaction(tx.serialize(), {
+              skipPreflight: false,
+              preflightCommitment: 'confirmed',
+            });
+            signatures.push(sig);
+          }
+          $('inscribeProgress').textContent = `Sent ${signatures.length}/${txs.length} transactions...`;
+        }
+
+        // Confirm
+        $('inscribeProgress').textContent = 'Confirming on-chain...';
+        const result = await confirmBatch(rpcUrl, signatures);
+
+        $('inscribeStats').innerHTML = `
+          Confirmed: <span>${result.confirmed.length}/${signatures.length}</span><br>
+          Explorer: <a href="https://solscan.io/tx/${signatures[0]}?cluster=${$('network').value}" target="_blank">View first TX</a>
+        `;
+        $('inscribeProgress').textContent = 'Inscription complete.';
+        $('step4').classList.add('done');
+        $('hydrateBtn').disabled = false;
+        $('step5').classList.add('active');
+      } catch (e) {
+        showError('Inscription failed: ' + e.message);
+        $('inscribeBtn').disabled = false;
+      }
+    };
+
+    // ── Step 5: Hydrate ─────────────────────────────────────────────────
+    $('hydrateBtn').onclick = async () => {
+      try {
+        $('hydrateBtn').disabled = true;
+        const rpcUrl = $('rpcUrl').value;
+
+        $('hydrateProgress').textContent = 'Fetching from chain...';
+        const recovered = await fetchBlob(rpcUrl, signatures, {
+          onProgress: (pct) => {
+            $('hydrateProgress').textContent = `Fetching: ${pct}%`;
+          },
+        });
+
+        // Verify .hyd header and extract file
+        const HEADER_SIZE = 49;
+        if (recovered[0]!==0x48||recovered[1]!==0x59||recovered[2]!==0x44) throw new Error('Not a valid .hyd blob');
+        const dv = new DataView(recovered.buffer, recovered.byteOffset);
+        const fileLen = dv.getUint32(13, true);
+        const expectedHash = recovered.slice(17, 49);
+        const fileData = recovered.slice(HEADER_SIZE, HEADER_SIZE + fileLen);
+
+        // Verify SHA-256
+        const actualHash = new Uint8Array(await crypto.subtle.digest('SHA-256', fileData));
+        const hashMatch = expectedHash.every((b, i) => b === actualHash[i]);
+        const hashHex = Array.from(actualHash).map(b => b.toString(16).padStart(2,'0')).join('');
+
+        $('hydrateStats').innerHTML = `
+          File size: <span>${(fileLen / 1024).toFixed(1)} KB</span><br>
+          SHA-256: <span>${hashHex.slice(0, 32)}...</span><br>
+          Integrity: <span style="color:${hashMatch ? '#2ea043' : '#f85149'}">${hashMatch ? 'VERIFIED' : 'MISMATCH'}</span>
+        `;
+        $('hydrateProgress').textContent = hashMatch ? 'Hydration complete — file verified.' : 'Hydration complete — hash mismatch!';
+        $('step5').classList.add('done');
+      } catch (e) {
+        showError('Hydration failed: ' + e.message);
+        $('hydrateBtn').disabled = false;
+      }
+    };
+
+    function showError(msg) {
+      $('error').textContent = msg;
+    }
+  </script>
+</body>
+</html>

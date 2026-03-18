@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Freeze Dry — Standalone Dehydrator</title>
+<style>
+  :root { --bg:#1A1714; --surface:#211E1A; --elevated:#2A2520; --text:#F0EBE5; --muted:#8A8278; --orange:#FF6B2C; --sage:#E8B82A; --border:#2E2820; --r:8px; --red:#E84855; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+  .c{max-width:720px;margin:0 auto;padding:2rem 1.5rem}
+  h1{font-size:1.4rem;margin-bottom:0.25rem}
+  h1 span{color:var(--orange)}
+  .sub{color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem}
+  label{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:0.35rem}
+  input[type=text],select{width:100%;padding:0.6rem 0.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:0.85rem;font-family:monospace}
+  input:focus,select:focus{outline:none;border-color:var(--orange)}
+  select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238A8278'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 0.8rem center}
+  .row{display:flex;gap:0.75rem;margin-top:0.75rem;flex-wrap:wrap;align-items:end}
+  .row .field{flex:1;min-width:180px}
+  .btn{display:inline-block;padding:0.65rem 1.25rem;border-radius:var(--r);font-size:0.9rem;font-weight:600;border:none;cursor:pointer;transition:opacity .2s}
+  .btn:hover{opacity:0.85}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-go{background:var(--sage);color:var(--bg)}
+  .btn-connect{background:var(--orange);color:var(--bg)}
+  .btn-dl{background:var(--elevated);color:var(--text);border:1px solid var(--border)}
+  .progress{margin:1rem 0}
+  .pbar{height:4px;background:var(--elevated);border-radius:2px;overflow:hidden}
+  .pfill{height:100%;width:0%;background:var(--sage);transition:width .3s}
+  .ptext{font-size:0.8rem;color:var(--muted);margin-top:0.4rem}
+  .drop{border:2px dashed var(--border);border-radius:var(--r);padding:2rem;text-align:center;cursor:pointer;transition:border-color .2s}
+  .drop:hover,.drop.over{border-color:var(--orange)}
+  .drop input{display:none}
+  .drop p{color:var(--muted);font-size:0.85rem}
+  .preview{text-align:center;margin:1rem 0}
+  .preview img{max-width:100%;max-height:300px;border-radius:var(--r)}
+  .stats{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;margin:0.75rem 0;font-size:0.8rem;color:var(--muted)}
+  .stats span{background:var(--elevated);padding:0.3rem 0.6rem;border-radius:4px}
+  canvas{display:none}
+  .hidden{display:none!important}
+  .info{font-size:0.75rem;color:var(--muted);margin-top:0.5rem;line-height:1.5}
+  .wallet-bar{display:flex;align-items:center;gap:0.75rem;margin-top:0.75rem}
+  .wallet-bar .addr{font-size:0.8rem;color:var(--sage);font-family:monospace}
+  .warn{color:var(--red);font-size:0.8rem;margin-top:0.5rem}
+  footer{text-align:center;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.75rem}
+  footer a{color:var(--orange);text-decoration:none}
+  @media(max-width:600px){.c{padding:1rem .75rem}.row{flex-direction:column}.btn{width:100%;text-align:center}.stats{flex-direction:column;align-items:center}}
+</style>
+</head>
+<body>
+<div class="c">
+  <h1><span>Freeze Dry</span> — Standalone Dehydrator</h1>
+  <p class="sub">Inscribe art directly to Solana memos using your wallet. Direct mode — byte-identical storage.</p>
+
+  <!-- Settings -->
+  <div class="panel">
+    <div class="row" style="margin-top:0">
+      <div class="field">
+        <label for="network">Network</label>
+        <select id="network">
+          <option value="mainnet" selected>Mainnet</option>
+          <option value="devnet">Devnet</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rpc">RPC Endpoint</label>
+        <input type="text" id="rpc" value="" placeholder="Auto (public) or Helius/QuickNode URL">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="priority">Priority Fee (micro-lamports/CU)</label>
+        <input type="text" id="priority" value="10000" placeholder="10000">
+      </div>
+      <div class="field">
+        <label for="cu">Compute Limit (CU)</label>
+        <input type="text" id="cu" value="350000" placeholder="350000">
+      </div>
+      <div class="field">
+        <label for="batch">Batch Size (txs per sign)</label>
+        <input type="text" id="batch" value="" placeholder="Auto (5 public / 10 paid)">
+      </div>
+    </div>
+    <div class="wallet-bar">
+      <button id="connect-btn" class="btn btn-connect">Connect Phantom</button>
+      <span id="wallet-addr" class="addr"></span>
+    </div>
+    <p class="info">Inscribes file bytes as Solana memo transactions using your wallet. Each chunk is a 600B memo.<br>
+    <strong>You pay the transaction fees</strong> (~0.000012 SOL per chunk). Public RPC is slow — paid RPC recommended for large files.<br>
+    Batch size controls how many txs are signed per wallet popup. Paid RPCs (Helius, QuickNode) can handle 20-50+.</p>
+  </div>
+
+  <!-- Upload -->
+  <div class="panel">
+    <label>Upload Image</label>
+    <div id="drop" class="drop">
+      <p>Drag & drop image here, or click to select</p>
+      <input type="file" id="file" accept="image/*">
+    </div>
+  </div>
+
+  <!-- Preview + Stats -->
+  <div id="preview-section" class="hidden">
+    <div class="preview"><img id="preview-img"></div>
+    <div class="stats">
+      <span id="stat-dims"></span>
+      <span id="stat-size"></span>
+      <span id="stat-chunks"></span>
+      <span id="stat-cost"></span>
+    </div>
+    <div style="text-align:center;margin:1rem 0">
+      <button id="go" class="btn btn-go" disabled>Freeze Dry to Solana</button>
+    </div>
+    <p id="warn" class="warn hidden"></p>
+  </div>
+
+  <!-- Progress -->
+  <div id="prog" class="progress hidden">
+    <div class="pbar"><div id="pfill" class="pfill"></div></div>
+    <p id="ptext" class="ptext">Starting...</p>
+  </div>
+
+  <!-- Result -->
+  <div id="result" class="hidden panel">
+    <p style="color:var(--sage);font-weight:600;margin-bottom:0.5rem">Inscription Complete</p>
+    <p id="result-hash" style="font-size:0.8rem;font-family:monospace;word-break:break-all;margin-bottom:0.5rem"></p>
+    <p id="result-stats" style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem"></p>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <button id="dl-sigs" class="btn btn-dl">Download Signatures JSON</button>
+      <button id="dl-proof" class="btn btn-dl">Download Proof JSON</button>
+    </div>
+    <p class="info" style="margin-top:0.75rem">Save the signatures JSON — it's needed to hydrate (reconstruct) the art from the chain.</p>
+  </div>
+
+  <footer>
+    <p>This file works forever with just a browser, a Phantom wallet, and SOL. Slow on public RPC, fast on paid.</p>
+    <p style="margin-top:0.35rem"><a href="https://freezedry.art">freezedry.art</a> — Use the full app for managed inscriptions, NFT minting, and more.</p>
+    <p style="margin-top:0.25rem"><a href="https://github.com/freezedry-protocol/freezedry-protocol">Freeze Dry Protocol</a> — MIT License</p>
+  </footer>
+</div>
+
+<script type="module">
+// Freeze Dry Standalone Dehydrator
+// Inscribes images to Solana as memo transactions — Direct mode (byte-identical)
+// Single dependency: @solana/web3.js for transaction building
+
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  TransactionInstruction,
+  ComputeBudgetProgram,
+} from 'https://esm.sh/@solana/web3.js@1.98.0';
+
+// ─── Constants ───
+const MEMO_PROGRAM = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+const MAGIC = new Uint8Array([0x48, 0x59, 0x44, 0x01]); // HYD\x01
+const HEADER_SIZE = 49;
+const MEMO_CHUNK_SIZE = 600;
+const V3_HEADER_SIZE = 15;
+const PAYLOAD_SIZE = MEMO_CHUNK_SIZE - V3_HEADER_SIZE; // 585B usable per chunk
+
+const PUBLIC_RPC = {
+  mainnet: 'https://api.mainnet-beta.solana.com',
+  devnet: 'https://api.devnet.solana.com',
+};
+
+// ─── State ───
+let walletPubkey = null;
+let fileBytes = null;
+let imgWidth = 0, imgHeight = 0;
+let fileName = '';
+
+// ─── DOM ───
+const networkEl = document.getElementById('network');
+const rpcEl = document.getElementById('rpc');
+const priorityEl = document.getElementById('priority');
+const cuEl = document.getElementById('cu');
+const connectBtn = document.getElementById('connect-btn');
+const walletAddr = document.getElementById('wallet-addr');
+const dropEl = document.getElementById('drop');
+const fileEl = document.getElementById('file');
+const previewSection = document.getElementById('preview-section');
+const previewImg = document.getElementById('preview-img');
+const goBtn = document.getElementById('go');
+const warnEl = document.getElementById('warn');
+const progEl = document.getElementById('prog');
+const pfill = document.getElementById('pfill');
+const ptext = document.getElementById('ptext');
+const resultEl = document.getElementById('result');
+const dlSigsBtn = document.getElementById('dl-sigs');
+const dlProofBtn = document.getElementById('dl-proof');
+
+// ─── Wallet Connection ───
+connectBtn.addEventListener('click', async () => {
+  const phantom = window.solana;
+  if (!phantom?.isPhantom) {
+    alert('Phantom wallet not found. Install it from phantom.app');
+    return;
+  }
+  try {
+    const resp = await phantom.connect();
+    walletPubkey = resp.publicKey;
+    walletAddr.textContent = walletPubkey.toBase58().slice(0, 4) + '...' + walletPubkey.toBase58().slice(-4);
+    connectBtn.textContent = 'Connected';
+    connectBtn.disabled = true;
+    updateGoButton();
+  } catch (err) {
+    alert('Wallet connection failed: ' + err.message);
+  }
+});
+
+// ─── File Upload ───
+dropEl.addEventListener('click', () => fileEl.click());
+dropEl.addEventListener('dragover', (e) => { e.preventDefault(); dropEl.classList.add('over'); });
+dropEl.addEventListener('dragleave', () => dropEl.classList.remove('over'));
+dropEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropEl.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileEl.addEventListener('change', () => {
+  if (fileEl.files[0]) handleFile(fileEl.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file.');
+    return;
+  }
+  fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    fileBytes = new Uint8Array(reader.result);
+
+    // Get dimensions via Image element
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      imgWidth = img.naturalWidth;
+      imgHeight = img.naturalHeight;
+      URL.revokeObjectURL(url);
+      showPreview(url);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      alert('Could not read image dimensions.');
+    };
+    // Keep URL alive for preview
+    previewImg.src = url;
+    img.src = URL.createObjectURL(file);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showPreview() {
+  previewSection.classList.remove('hidden');
+
+  // Calculate stats
+  const blobSize = HEADER_SIZE + fileBytes.length;
+  const chunkCount = Math.ceil(blobSize / PAYLOAD_SIZE);
+  const costPerTx = 0.000012; // ~12,000 lamports (base + priority)
+  const totalCost = (chunkCount + 1) * costPerTx; // +1 for pointer
+
+  document.getElementById('stat-dims').textContent = `${imgWidth}x${imgHeight}`;
+  document.getElementById('stat-size').textContent = formatBytes(fileBytes.length);
+  document.getElementById('stat-chunks').textContent = `${chunkCount + 1} txs`;
+  document.getElementById('stat-cost').textContent = `~${totalCost.toFixed(4)} SOL`;
+
+  if (fileBytes.length > 500000) {
+    warnEl.textContent = `Large file (${formatBytes(fileBytes.length)}). This will take a while on public RPC.`;
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.classList.add('hidden');
+  }
+
+  updateGoButton();
+}
+
+function updateGoButton() {
+  goBtn.disabled = !(walletPubkey && fileBytes);
+}
+
+// ─── Inscription ───
+goBtn.addEventListener('click', inscribe);
+
+async function inscribe() {
+  if (!walletPubkey || !fileBytes) return;
+
+  goBtn.disabled = true;
+  resultEl.classList.add('hidden');
+  const rpcUrl = rpcEl.value.trim() || PUBLIC_RPC[networkEl.value] || PUBLIC_RPC.mainnet;
+  const connection = new Connection(rpcUrl, 'confirmed');
+  const priorityFee = parseInt(priorityEl.value) || 10000;
+  const cuLimit = parseInt(cuEl.value) || 350000;
+
+  try {
+    // Step 1: Build .hyd blob (Direct mode = 3)
+    progress('Building .hyd blob...', 2);
+    const hashBuf = await crypto.subtle.digest('SHA-256', fileBytes);
+    const hashBytes = new Uint8Array(hashBuf);
+    const hashHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const blob = buildDirectBlob(fileBytes, imgWidth, imgHeight, hashBytes);
+    const blobSize = blob.length;
+
+    // Step 2: Shred into chunks
+    progress('Shredding blob into chunks...', 5);
+    const hash8 = hashHex.slice(0, 8);
+    const rawChunks = [];
+    for (let off = 0; off < blob.length; off += PAYLOAD_SIZE) {
+      rawChunks.push(blob.slice(off, Math.min(off + PAYLOAD_SIZE, blob.length)));
+    }
+    const chunkCount = rawChunks.length;
+
+    // Build v3 memo data for each chunk
+    const memoStrings = rawChunks.map((chunk, i) => {
+      const idxStr = String(i).padStart(2, '0');
+      const header = `FD:${hash8}:${idxStr}:`;
+      return header + uint8ToBase64(chunk);
+    });
+
+    // Step 3: Inscribe chunks in batches (batch-sign → parallel send → confirm)
+    const signatures = [];
+    const isPublicRpc = rpcUrl.includes('solana.com');
+    const userBatch = parseInt(document.getElementById('batch').value);
+    const BATCH_SIZE = userBatch > 0 ? userBatch : (isPublicRpc ? 5 : 10);
+    const SEND_CONCURRENCY = Math.min(BATCH_SIZE, isPublicRpc ? 3 : Math.ceil(BATCH_SIZE / 2));
+    const SEND_DELAY = isPublicRpc ? 1000 : 200;
+
+    for (let batchStart = 0; batchStart < memoStrings.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, memoStrings.length);
+      const batchMemos = memoStrings.slice(batchStart, batchEnd);
+      const batchNum = Math.floor(batchStart / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(memoStrings.length / BATCH_SIZE);
+      const pct = 5 + Math.round((batchStart / memoStrings.length) * 85);
+
+      progress(`Batch ${batchNum}/${totalBatches}: building ${batchMemos.length} transactions...`, pct);
+
+      // Get fresh blockhash for this batch
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
+      // Build unsigned transactions
+      const unsignedTxs = batchMemos.map(memo => {
+        const tx = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: walletPubkey,
+        });
+        tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }));
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee }));
+        tx.add(new TransactionInstruction({
+          keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+          programId: MEMO_PROGRAM,
+          data: new TextEncoder().encode(memo),
+        }));
+        return tx;
+      });
+
+      // Batch-sign via Phantom (one popup for the whole batch)
+      progress(`Batch ${batchNum}/${totalBatches}: sign ${batchMemos.length} txs in wallet...`, pct + 2);
+      const signedTxs = await window.solana.signAllTransactions(unsignedTxs);
+
+      // Send all signed transactions with concurrency limit
+      progress(`Batch ${batchNum}/${totalBatches}: sending ${batchMemos.length} txs...`, pct + 5);
+      const batchSigs = await sendBatchConcurrent(connection, signedTxs, SEND_CONCURRENCY, SEND_DELAY,
+        (sent, total) => {
+          progress(`Batch ${batchNum}/${totalBatches}: sent ${sent}/${total}, confirming...`,
+            pct + 5 + Math.round((sent / total) * 5));
+        });
+
+      // Confirm all transactions in the batch
+      progress(`Batch ${batchNum}/${totalBatches}: confirming ${batchMemos.length} txs...`, pct + 12);
+      await confirmBatch(connection, batchSigs, blockhash, lastValidBlockHeight,
+        (confirmed, total) => {
+          progress(`Batch ${batchNum}/${totalBatches}: confirmed ${confirmed}/${total}`,
+            pct + 12 + Math.round((confirmed / total) * 5));
+        });
+
+      signatures.push(...batchSigs);
+    }
+
+    // Step 4: Send pointer memo (single tx, always separate)
+    progress('Sending pointer memo...', 93);
+    const inscriber = walletPubkey.toBase58().slice(0, 8);
+    const lastChunkSig = signatures[signatures.length - 1];
+    const pointerData = `FREEZEDRY:3:sha256:${hashHex}:${chunkCount}:${blobSize}:${MEMO_CHUNK_SIZE}:oIc:${inscriber}:${lastChunkSig}`;
+    const pointerSig = await sendMemoTx(connection, pointerData, priorityFee, cuLimit);
+
+    // Done!
+    progress('Inscription complete!', 100);
+
+    // Build result data
+    const resultData = {
+      hash: `sha256:${hashHex}`,
+      chunkCount,
+      blobSize,
+      signatures,
+      pointerSignature: pointerSig,
+      network: networkEl.value,
+      inscriber: walletPubkey.toBase58(),
+      timestamp: new Date().toISOString(),
+      fileName,
+      dimensions: { width: imgWidth, height: imgHeight },
+    };
+
+    showResult(resultData, hashHex);
+
+  } catch (err) {
+    progress('Error: ' + err.message, 0);
+    pfill.style.width = '0%';
+  } finally {
+    goBtn.disabled = false;
+  }
+}
+
+/** Send pre-signed transactions with concurrency limit */
+async function sendBatchConcurrent(connection, signedTxs, concurrency, delayMs, onProgress) {
+  const sigs = new Array(signedTxs.length).fill(null);
+  let sent = 0;
+
+  async function sendOne(index) {
+    const rawTx = signedTxs[index].serialize();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const sig = await connection.sendRawTransaction(rawTx, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+        });
+        sigs[index] = sig;
+        sent++;
+        if (onProgress) onProgress(sent, signedTxs.length);
+        return;
+      } catch (err) {
+        const msg = err.message || '';
+        if (msg.toLowerCase().includes('ratelimit') || msg.includes('429')) {
+          await sleep(3000 * (attempt + 1));
+          continue;
+        }
+        if (attempt < 3) { await sleep(2000 * (attempt + 1)); continue; }
+        throw err;
+      }
+    }
+  }
+
+  // Send with concurrency limit
+  const queue = [...Array(signedTxs.length).keys()];
+  const workers = [];
+  for (let w = 0; w < concurrency; w++) {
+    workers.push((async () => {
+      while (queue.length > 0) {
+        const idx = queue.shift();
+        if (idx === undefined) break;
+        await sendOne(idx);
+        if (delayMs > 0) await sleep(delayMs);
+      }
+    })());
+  }
+  await Promise.all(workers);
+
+  // Verify all sent
+  for (let i = 0; i < sigs.length; i++) {
+    if (!sigs[i]) throw new Error(`Failed to send chunk ${i}`);
+  }
+  return sigs;
+}
+
+/** Confirm a batch of transaction signatures */
+async function confirmBatch(connection, sigs, blockhash, lastValidBlockHeight, onProgress) {
+  let confirmed = 0;
+  const pending = new Set(sigs);
+
+  // Poll until all confirmed or blockhash expires
+  const maxWait = 60000; // 60s max wait
+  const start = Date.now();
+
+  while (pending.size > 0 && (Date.now() - start) < maxWait) {
+    const checks = [...pending].map(async (sig) => {
+      try {
+        const status = await connection.getSignatureStatus(sig);
+        if (status?.value?.confirmationStatus === 'confirmed' ||
+            status?.value?.confirmationStatus === 'finalized') {
+          if (status.value.err) throw new Error(`Tx failed: ${sig.slice(0, 12)}...`);
+          pending.delete(sig);
+          confirmed++;
+          if (onProgress) onProgress(confirmed, sigs.length);
+        }
+      } catch (err) {
+        if (err.message.includes('Tx failed')) throw err;
+        // Ignore polling errors, retry next round
+      }
+    });
+    await Promise.all(checks);
+    if (pending.size > 0) await sleep(2000);
+  }
+
+  if (pending.size > 0) {
+    throw new Error(`${pending.size} transactions not confirmed within timeout. They may still land — check explorer.`);
+  }
+}
+
+/** Send a single memo transaction (used for pointer memo) */
+async function sendMemoTx(connection, memoData, priorityFee, cuLimit) {
+  const memoBytes = new TextEncoder().encode(memoData);
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
+      const tx = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: walletPubkey,
+      });
+
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: cuLimit }));
+      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee }));
+      tx.add(new TransactionInstruction({
+        keys: [{ pubkey: walletPubkey, isSigner: true, isWritable: false }],
+        programId: MEMO_PROGRAM,
+        data: memoBytes,
+      }));
+
+      const signed = await window.solana.signTransaction(tx);
+      const rawTx = signed.serialize();
+      const sig = await connection.sendRawTransaction(rawTx, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+      });
+
+      await connection.confirmTransaction({
+        signature: sig,
+        blockhash,
+        lastValidBlockHeight,
+      }, 'confirmed');
+
+      return sig;
+
+    } catch (err) {
+      const msg = err.message || '';
+      if (msg.includes('User rejected')) throw err;
+      if (msg.includes('Blockhash not found') || msg.includes('block height exceeded')) {
+        await sleep(2000);
+        continue;
+      }
+      if (attempt < 4) {
+        await sleep(3000 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Failed to send transaction after 5 attempts');
+}
+
+function showResult(data, hashHex) {
+  resultEl.classList.remove('hidden');
+  document.getElementById('result-hash').textContent = `Hash: sha256:${hashHex}`;
+  document.getElementById('result-stats').textContent =
+    `${data.chunkCount} chunks + 1 pointer = ${data.chunkCount + 1} total transactions | ${formatBytes(data.blobSize)} on-chain`;
+
+  // Signatures JSON (for hydrator input)
+  dlSigsBtn.onclick = () => {
+    const json = JSON.stringify({
+      signatures: data.signatures,
+      network: data.network,
+      hash: data.hash,
+    }, null, 2);
+    downloadJSON(json, `freezedry-sigs-${hashHex.slice(0, 12)}.json`);
+  };
+
+  // Full proof JSON
+  dlProofBtn.onclick = () => {
+    const json = JSON.stringify(data, null, 2);
+    downloadJSON(json, `freezedry-proof-${hashHex.slice(0, 12)}.json`);
+  };
+}
+
+// ─── Blob Building ───
+function buildDirectBlob(fileBytes, width, height, hashBytes) {
+  // Direct mode: avifLen=0, deltaLen=fileBytes.length, file data in delta slot
+  const totalSize = HEADER_SIZE + fileBytes.length;
+  const blob = new Uint8Array(totalSize);
+  const view = new DataView(blob.buffer);
+
+  blob.set(MAGIC, 0);                            // bytes 0-3: HYD\x01
+  blob[4] = 3;                                   // byte 4: mode 3 (direct, open)
+  view.setUint16(5, width, true);                 // bytes 5-6: width LE
+  view.setUint16(7, height, true);                // bytes 7-8: height LE
+  view.setUint32(9, 0, true);                     // bytes 9-12: avifLen = 0
+  view.setUint32(13, fileBytes.length, true);     // bytes 13-16: deltaLen = file size
+  blob.set(hashBytes, 17);                        // bytes 17-48: SHA-256 hash
+
+  blob.set(fileBytes, HEADER_SIZE);               // byte 49+: file data
+  return blob;
+}
+
+// ─── Utilities ───
+function uint8ToBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + 'MB';
+}
+
+function downloadJSON(json, filename) {
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function progress(text, pct) {
+  progEl.classList.remove('hidden');
+  pfill.style.width = pct + '%';
+  ptext.textContent = text;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
