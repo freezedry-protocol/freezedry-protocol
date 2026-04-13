@@ -1,10 +1,6 @@
 [workspace]
 members = [
-    "programs/blip-registry",
     "programs/fd-pointer",
-    "programs/inscription-jobs",
-    "programs/node-registry",
-    "programs/pod",
 ]
 resolver = "2"
 
