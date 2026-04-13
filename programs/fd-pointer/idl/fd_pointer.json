@@ -1,0 +1,555 @@
+{
+  "address": "FrzDrykT4XSp5BwdYdSJdLHbDVVPuquN2cDMJyVJ35iJ",
+  "metadata": {
+    "name": "fd_pointer",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Freeze Dry Protocol — Immutable on-chain pointer PDAs for inscription discovery"
+  },
+  "instructions": [
+    {
+      "name": "create_pointer",
+      "docs": [
+        "Create an inscription pointer PDA.",
+        "Anyone signs + pays rent. `inscriber` is the recorded identity (typically the artist)."
+      ],
+      "discriminator": [
+        48,
+        87,
+        191,
+        51,
+        157,
+        224,
+        95,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  100,
+                  45,
+                  112,
+                  111,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "content_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Whoever pays rent and signs the TX. Doesn't have to be the inscriber."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "content_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "inscriber",
+          "type": "pubkey"
+        },
+        {
+          "name": "chunk_count",
+          "type": "u32"
+        },
+        {
+          "name": "blob_size",
+          "type": "u32"
+        },
+        {
+          "name": "last_sig",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "mode",
+          "type": "u8"
+        },
+        {
+          "name": "content_type",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "link_nft",
+      "docs": [
+        "Link a primary NFT mint to an inscription. One-shot — locks forever.",
+        "Only the inscriber (as recorded in the PDA) can call this."
+      ],
+      "discriminator": [
+        199,
+        188,
+        128,
+        49,
+        165,
+        61,
+        6,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  100,
+                  45,
+                  112,
+                  111,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pointer.content_hash",
+                "account": "Pointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "inscriber",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "nft_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_collection",
+      "docs": [
+        "Set the collection for an inscription. One-shot — locks forever.",
+        "Only the inscriber (as recorded in the PDA) can call this."
+      ],
+      "discriminator": [
+        192,
+        254,
+        206,
+        76,
+        168,
+        182,
+        59,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "pointer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  100,
+                  45,
+                  112,
+                  111,
+                  105,
+                  110,
+                  116,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pointer.content_hash",
+                "account": "Pointer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "inscriber",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "collection",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Pointer",
+      "discriminator": [
+        31,
+        144,
+        159,
+        52,
+        95,
+        134,
+        207,
+        237
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CollectionSet",
+      "discriminator": [
+        44,
+        187,
+        147,
+        248,
+        81,
+        30,
+        20,
+        101
+      ]
+    },
+    {
+      "name": "NftLinked",
+      "discriminator": [
+        210,
+        206,
+        212,
+        147,
+        115,
+        169,
+        186,
+        75
+      ]
+    },
+    {
+      "name": "PointerCreated",
+      "discriminator": [
+        1,
+        200,
+        78,
+        19,
+        101,
+        125,
+        96,
+        161
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AlreadyLinked",
+      "msg": "Primary NFT has already been linked"
+    },
+    {
+      "code": 6001,
+      "name": "CollectionAlreadySet",
+      "msg": "Collection has already been set"
+    },
+    {
+      "code": 6002,
+      "name": "NotInscriber",
+      "msg": "Signer is not the inscriber"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidEd25519Instruction",
+      "msg": "Ed25519 precompile instruction not found"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidEd25519Program",
+      "msg": "Preceding instruction is not the Ed25519 precompile program"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidEd25519Accounts",
+      "msg": "Ed25519 precompile must have zero accounts"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidSignatureCount",
+      "msg": "Ed25519 precompile must contain exactly one signature"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidInstructionIndices",
+      "msg": "Ed25519 instruction indices must all be 0xFFFF (data inline)"
+    },
+    {
+      "code": 6008,
+      "name": "ArtistMismatch",
+      "msg": "Ed25519 public key does not match claimed artist"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidMessageFormat",
+      "msg": "Signed message does not match expected format"
+    },
+    {
+      "code": 6010,
+      "name": "MalformedPrecompileData",
+      "msg": "Ed25519 precompile data is malformed or too short"
+    },
+    {
+      "code": 6011,
+      "name": "ZeroChunks",
+      "msg": "Chunk count must be greater than zero"
+    },
+    {
+      "code": 6012,
+      "name": "ZeroBlobSize",
+      "msg": "Blob size must be greater than zero"
+    }
+  ],
+  "types": [
+    {
+      "name": "CollectionSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "content_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "NftLinked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "content_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nft_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pointer",
+      "docs": [
+        "Immutable on-chain pointer PDA for inscription discovery.",
+        "One PDA per unique content hash. First inscriber wins.",
+        "",
+        "PDA seeds: [b\"fd-pointer\", content_hash]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "content_hash",
+            "docs": [
+              "SHA-256 of the inscribed blob — THE identity and PDA seed"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "inscriber",
+            "docs": [
+              "Artist who authorized the inscription (signer or ed25519-verified)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "docs": [
+              "Metaplex collection address.",
+              "Pubkey::default() = standalone (not part of a collection).",
+              "Set-once mutable: starts default, artist sets once, locks forever."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "chunk_count",
+            "docs": [
+              "Total memo chunks inscribed on-chain"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "blob_size",
+            "docs": [
+              "Total blob size in bytes"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "last_sig",
+            "docs": [
+              "Last chunk TX signature — reconstruction entry point (64 raw bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "mode",
+            "docs": [
+              "Inscription mode: 0=open, 1=encrypted, 3=direct"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "content_type",
+            "docs": [
+              "Content type: 0=image, 1=document, 2=certificate, 3=video, 4=audio, 5=other",
+              "Informational — helps frontends display the right icon/preview"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "slot",
+            "docs": [
+              "Solana slot at PDA creation (half of FD# = slot.txIndex)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp at PDA creation (from Clock sysvar)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "primary_nft",
+            "docs": [
+              "Primary NFT mint address.",
+              "Pubkey::default() = unlinked.",
+              "Set-once mutable: artist sets once, locks forever."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Schema version for future realloc (starts at 1)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved for future expansion"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PointerCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "content_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "inscriber",
+            "type": "pubkey"
+          },
+          {
+            "name": "chunk_count",
+            "type": "u32"
+          },
+          {
+            "name": "blob_size",
+            "type": "u32"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
