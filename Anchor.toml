@@ -9,11 +9,18 @@ skip-lint = false
 freezedry_registry = "6UGJUc28AuCj8a8sjhsVEKbvYHfQECCuJC7i54vk2to"
 freezedry_jobs = "AmqBYKYCqpmKoFcgvripCQ3bJC2d8ygWWhcoHtmTvvzx"
 freezedry_pod = "2hTh2yTcXhxEvz3hFAhGiUNm2eQoEvQvrAn5C1aNkm2W"
+blip_registry = "2YeNzcvHqswJJbxGo6yg1TZ46o7HxUs6fx9bDraE44rP"
+fd_pointer = "6o3g59rNF4VoKS8HtFY9EQP75go6LjETTxFpaENdCmus"
 
 [programs.devnet]
 freezedry_registry = "6UGJUc28AuCj8a8sjhsVEKbvYHfQECCuJC7i54vk2to"
 freezedry_jobs = "AmqBYKYCqpmKoFcgvripCQ3bJC2d8ygWWhcoHtmTvvzx"
 freezedry_pod = "2hTh2yTcXhxEvz3hFAhGiUNm2eQoEvQvrAn5C1aNkm2W"
+blip_registry = "2YeNzcvHqswJJbxGo6yg1TZ46o7HxUs6fx9bDraE44rP"
+fd_pointer = "6o3g59rNF4VoKS8HtFY9EQP75go6LjETTxFpaENdCmus"
+
+[programs.mainnet]
+fd_pointer = "FrzDrykT4XSp5BwdYdSJdLHbDVVPuquN2cDMJyVJ35iJ"
 
 [registry]
 url = "https://api.apr.dev"
