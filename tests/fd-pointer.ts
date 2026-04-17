@@ -177,6 +177,126 @@ async function createPointerWithPayer(
 
 // (createPointerDelegated removed — delegated instruction no longer exists)
 
+/**
+ * UTF-8 safe truncation to 32 bytes, zero-padded. Matches the behavior
+ * partner API + node clients MUST use before sending title to create_pointer_v2
+ * (the on-chain handler rejects invalid UTF-8 via PointerError::InvalidTitle).
+ *
+ * Iterates by Unicode code point (for..of over a string gives code points,
+ * not code units). Accumulates characters whose UTF-8 bytes still fit in 32,
+ * stops before overflow. Always produces a valid UTF-8 prefix of `s`.
+ */
+function padTitle(s: string): Buffer {
+  const buf = Buffer.alloc(32, 0);
+  if (!s) return buf;
+
+  const encoder = new TextEncoder();
+  let byteLen = 0;
+  let truncated = "";
+
+  for (const ch of s) {
+    const chBytes = encoder.encode(ch);
+    if (byteLen + chBytes.length > 32) break;
+    truncated += ch;
+    byteLen += chBytes.length;
+  }
+
+  Buffer.from(truncated, "utf8").copy(buf, 0);
+  return buf;
+}
+
+/** Helper: create_pointer_v2 with upfront primary_nft + collection + title */
+async function createPointerV2(
+  program: Program<FdPointer>,
+  inscriber: Keypair,
+  contentHash: Buffer,
+  opts: {
+    chunkCount?: number;
+    blobSize?: number;
+    lastSig?: number[];
+    mode?: number;
+    contentType?: number;
+    primaryNft?: PublicKey;
+    collection?: PublicKey;
+    title?: Buffer | number[];   // 32 bytes, zero-padded UTF-8
+  } = {}
+): Promise<string> {
+  const {
+    chunkCount = 100,
+    blobSize = 58500,
+    lastSig = Array(64).fill(0),   // default to [0; 64] — finalize via update_last_sig later
+    mode = MODE_OPEN,
+    contentType = CONTENT_TYPE_IMAGE,
+    primaryNft = PublicKey.default,
+    collection = PublicKey.default,
+    title = Buffer.alloc(32, 0),   // default empty title (all zeros)
+  } = opts;
+
+  const titleBytes = Array.from(title);
+  if (titleBytes.length !== 32) {
+    throw new Error(`title must be exactly 32 bytes, got ${titleBytes.length}`);
+  }
+
+  const [pointerPDA] = findPointerPDA(contentHash, program.programId);
+
+  return program.methods
+    .createPointerV2(
+      Array.from(contentHash) as any,
+      inscriber.publicKey,
+      chunkCount,
+      blobSize,
+      lastSig as any,
+      mode,
+      contentType,
+      primaryNft,
+      collection,
+      titleBytes as any,
+    )
+    .accountsPartial({
+      pointer: pointerPDA,
+      payer: inscriber.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([inscriber])
+    .rpc();
+}
+
+/** Helper: call update_last_sig on an existing pointer */
+async function callUpdateLastSig(
+  program: Program<FdPointer>,
+  inscriber: Keypair,
+  contentHash: Buffer,
+  lastSig: number[],
+): Promise<string> {
+  const [pointerPDA] = findPointerPDA(contentHash, program.programId);
+  return program.methods
+    .updateLastSig(lastSig as any)
+    .accountsPartial({
+      pointer: pointerPDA,
+      inscriber: inscriber.publicKey,
+    })
+    .signers([inscriber])
+    .rpc();
+}
+
+/** Helper: call transfer_inscriber */
+async function callTransferInscriber(
+  program: Program<FdPointer>,
+  currentInscriber: Keypair,
+  contentHash: Buffer,
+  newInscriber: PublicKey,
+): Promise<string> {
+  const [pointerPDA] = findPointerPDA(contentHash, program.programId);
+  return program.methods
+    .transferInscriber(newInscriber)
+    .accountsPartial({
+      pointer: pointerPDA,
+      inscriber: currentInscriber.publicKey,
+    })
+    .signers([currentInscriber])
+    .rpc();
+}
+
 // ── Test suite ───────────────────────────────────────────────────────────
 
 describe("fd_pointer", () => {
@@ -999,20 +1119,767 @@ describe("fd_pointer", () => {
     });
 
     it("no instruction exists to close/delete a pointer", async () => {
-      // Verify by checking the IDL — only 4 instructions exist
+      // v2+migrate — 7 instructions. None of them CLOSE a PDA, which is what
+      // this test is protecting. Keep this list in sync with lib.rs #[program].
       const idl = program.idl;
       const instructionNames = idl.instructions.map((ix: any) => ix.name);
 
-      // Anchor IDL uses camelCase for instruction names
       assert.deepEqual(
         instructionNames.sort(),
         [
           "createPointer",
+          "createPointerV2",
           "linkNft",
+          "migratePointerAccount",
           "setCollection",
+          "transferInscriber",
+          "updateLastSig",
         ].sort(),
-        "only 3 instructions exist — no close, no update, no admin"
+        "7 instructions — no close/delete/admin (migrate grows accounts, never closes)"
       );
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 5. CREATE_POINTER_V2 — upfront primary_nft + collection
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe("create_pointer_v2 + update_last_sig", () => {
+    const v2Artist = Keypair.generate();
+    const v2NodeOp = Keypair.generate();
+    const v2Attacker = Keypair.generate();
+    const v2Hash = sha256("v2-test-upfront-nft");
+    const v2HashUnlinked = sha256("v2-test-unlinked-at-start");
+    const v2HashFinalize = sha256("v2-test-finalize-later");
+    const v2HashLockCheck = sha256("v2-test-lock-check");
+    const fakeNftMint = Keypair.generate().publicKey;
+    const fakeCollectionMint = Keypair.generate().publicKey;
+
+    before(async () => {
+      await Promise.all([
+        airdrop(provider.connection, v2Artist.publicKey),
+        airdrop(provider.connection, v2NodeOp.publicKey),
+        airdrop(provider.connection, v2Attacker.publicKey),
+      ]);
+    });
+
+    it("creates a pointer with primary_nft + collection set at creation (full link)", async () => {
+      await createPointerV2(program, v2Artist, v2Hash, {
+        chunkCount: 79,
+        blobSize: 46034,
+        lastSig: Array(64).fill(0),
+        mode: MODE_DIRECT,
+        contentType: CONTENT_TYPE_IMAGE,
+        primaryNft: fakeNftMint,
+        collection: fakeCollectionMint,
+      });
+
+      const [pda] = findPointerPDA(v2Hash, program.programId);
+      const pointer = await program.account.pointer.fetch(pda);
+
+      assert.equal(pointer.inscriber.toBase58(), v2Artist.publicKey.toBase58());
+      assert.equal(pointer.primaryNft.toBase58(), fakeNftMint.toBase58(), "primary_nft populated at create");
+      assert.equal(pointer.collection.toBase58(), fakeCollectionMint.toBase58(), "collection populated at create");
+      assert.equal(pointer.chunkCount, 79);
+      assert.equal(pointer.blobSize, 46034);
+      assert.equal(pointer.mode, MODE_DIRECT);
+      assert.equal(pointer.version, 2, "v2 handler sets version=2");
+      assert.deepEqual(
+        Array.from(pointer.lastSig),
+        Array(64).fill(0),
+        "last_sig stays [0;64] until update_last_sig runs"
+      );
+    });
+
+    it("accepts Pubkey::default for primary_nft and collection (unlinked case — behaves like v1)", async () => {
+      await createPointerV2(program, v2Artist, v2HashUnlinked, {
+        chunkCount: 4,
+        blobSize: 2048,
+        primaryNft: PublicKey.default,
+        collection: PublicKey.default,
+      });
+
+      const [pda] = findPointerPDA(v2HashUnlinked, program.programId);
+      const pointer = await program.account.pointer.fetch(pda);
+      assert.equal(pointer.primaryNft.toBase58(), PublicKey.default.toBase58());
+      assert.equal(pointer.collection.toBase58(), PublicKey.default.toBase58());
+    });
+
+    it("update_last_sig finalizes last_sig when inscriber signs", async () => {
+      // Create with zero last_sig, then finalize
+      await createPointerV2(program, v2Artist, v2HashFinalize, {
+        chunkCount: 79,
+        blobSize: 46034,
+        lastSig: Array(64).fill(0),
+      });
+
+      const finalSig = fakeSig();
+      await callUpdateLastSig(program, v2Artist, v2HashFinalize, finalSig);
+
+      const [pda] = findPointerPDA(v2HashFinalize, program.programId);
+      const pointer = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(pointer.lastSig), finalSig, "last_sig finalized");
+    });
+
+    it("update_last_sig fails when already finalized (write-once)", async () => {
+      // v2HashFinalize was just finalized above — second call must fail
+      let errored = false;
+      try {
+        await callUpdateLastSig(
+          program,
+          v2Artist,
+          v2HashFinalize,
+          fakeSig(),
+        );
+      } catch (err: any) {
+        errored = true;
+        assert.include(
+          err.toString(),
+          "AlreadyFinalized",
+          "expected AlreadyFinalized error"
+        );
+      }
+      assert.isTrue(errored, "second update_last_sig should have failed");
+    });
+
+    it("update_last_sig fails when caller is not the inscriber", async () => {
+      await createPointerV2(program, v2Artist, v2HashLockCheck, {
+        chunkCount: 4,
+        blobSize: 2048,
+        lastSig: Array(64).fill(0),
+      });
+
+      let errored = false;
+      try {
+        await callUpdateLastSig(program, v2Attacker, v2HashLockCheck, fakeSig());
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "NotInscriber");
+      }
+      assert.isTrue(errored);
+    });
+
+    it("update_last_sig rejects a zero-only last_sig write", async () => {
+      // v2HashLockCheck still has zero last_sig. Passing Array(64).fill(0) should be rejected.
+      let errored = false;
+      try {
+        await callUpdateLastSig(program, v2Artist, v2HashLockCheck, Array(64).fill(0));
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "ZeroLastSig");
+      }
+      assert.isTrue(errored, "zero last_sig is rejected");
+    });
+
+    it("v1 create_pointer still works (regression)", async () => {
+      const v1Hash = sha256("regression-v1-still-works");
+      const v1Artist = Keypair.generate();
+      await airdrop(provider.connection, v1Artist.publicKey);
+
+      await createPointerDirect(program, provider, v1Artist, v1Hash, {
+        chunkCount: 10,
+        blobSize: 5000,
+      });
+
+      const [pda] = findPointerPDA(v1Hash, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.inscriber.toBase58(), v1Artist.publicKey.toBase58());
+      assert.equal(p.version, 1, "v1 handler leaves version=1");
+      assert.equal(p.primaryNft.toBase58(), PublicKey.default.toBase58(), "v1 leaves NFT unset");
+
+      // Title + new _reserved must be zero-filled on v1 creates (back-compat guarantee).
+      // Anchor TS type strips the leading underscore: _reserved -> reserved.
+      assert.deepEqual(Array.from(p.title), Array(32).fill(0), "v1 leaves title zeros");
+      assert.deepEqual(Array.from((p as any).reserved), Array(64).fill(0), "v1 leaves reserved zeros");
+    });
+
+    // ── Title field tests ────────────────────────────────────────────────
+
+    it("stores ASCII title bytes on-chain when provided via create_pointer_v2", async () => {
+      const h = sha256("title-ascii-happy-path");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      const title = padTitle("Sunset #3");
+      await createPointerV2(program, artist, h, { title });
+
+      const [pda] = findPointerPDA(h, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(title), "title bytes persisted");
+
+      // Decode back to string (trim trailing zeros)
+      const stored = Buffer.from(p.title as any);
+      const trimLen = stored.indexOf(0) === -1 ? 32 : stored.indexOf(0);
+      assert.equal(stored.slice(0, trimLen).toString("utf8"), "Sunset #3");
+    });
+
+    it("accepts empty title (all zeros)", async () => {
+      const h = sha256("title-empty-ok");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      await createPointerV2(program, artist, h, { title: Buffer.alloc(32, 0) });
+
+      const [pda] = findPointerPDA(h, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array(32).fill(0), "empty title stored as zeros");
+    });
+
+    it("accepts exactly 32-byte title (no truncation, no trailing zeros)", async () => {
+      const h = sha256("title-exact-32");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      const title = Buffer.from("A".repeat(32), "utf8");
+      assert.equal(title.length, 32);
+
+      await createPointerV2(program, artist, h, { title });
+
+      const [pda] = findPointerPDA(h, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(title), "full 32-byte title stored");
+      assert.equal(Buffer.from(p.title as any).toString("utf8"), "A".repeat(32));
+    });
+
+    it("accepts multi-byte UTF-8 (emoji + CJK)", async () => {
+      const h = sha256("title-utf8-multibyte");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      const title = padTitle("夕焼け❄️");  // 4 CJK (12 bytes) + snowflake emoji (4 bytes VS) = fits
+      await createPointerV2(program, artist, h, { title });
+
+      const [pda] = findPointerPDA(h, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+
+      const stored = Buffer.from(p.title as any);
+      const trimLen = stored.indexOf(0) === -1 ? 32 : stored.indexOf(0);
+      const decoded = stored.slice(0, trimLen).toString("utf8");
+      assert.equal(decoded, "夕焼け❄️", "multibyte UTF-8 roundtrips cleanly");
+    });
+
+    it("padTitle truncates long input at UTF-8 code-point boundary (never mid-codepoint)", async () => {
+      // 20 three-byte CJK chars = 60 bytes. Truncates to last complete char fitting in 32.
+      // 32 / 3 = 10 full chars = 30 bytes, next char would overflow, trailing 2 zeros.
+      const longCjk = "日".repeat(20);
+      const title = padTitle(longCjk);
+
+      // Must still be valid UTF-8 when decoded (never split a multi-byte sequence)
+      const stored = title;
+      const trimLen = stored.indexOf(0) === -1 ? 32 : stored.indexOf(0);
+      const decoded = stored.slice(0, trimLen).toString("utf8");
+      assert.equal(decoded, "日".repeat(10), "truncated to 10 full CJK chars = 30 bytes");
+      assert.equal(Buffer.byteLength(decoded, "utf8"), 30);
+
+      // And the on-chain handler accepts it
+      const h = sha256("title-truncate-cjk");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+      await createPointerV2(program, artist, h, { title });
+
+      const [pda] = findPointerPDA(h, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(title));
+    });
+
+    it("REJECTS invalid UTF-8 bytes with InvalidTitle error", async () => {
+      const h = sha256("title-invalid-utf8");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      // Invalid UTF-8: lone continuation byte (0x80 with no leading byte)
+      const badTitle = Buffer.alloc(32, 0);
+      badTitle[0] = 0x80;
+
+      let errored = false;
+      try {
+        await createPointerV2(program, artist, h, { title: badTitle });
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "InvalidTitle", "expected InvalidTitle error");
+      }
+      assert.isTrue(errored, "invalid UTF-8 must be rejected at handler");
+    });
+
+    it("REJECTS invalid UTF-8 (truncated multibyte at end before padding)", async () => {
+      const h = sha256("title-truncated-multibyte");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      // CJK "日" is E6 97 A5 (3 bytes). Put just E6 97 then null padding.
+      // This mimics what would happen if a naive client truncated mid-char.
+      // Validator stops at first 0x00 — so bytes [0..2] = [E6, 97, 00...] — but
+      // the validator checks bytes BEFORE the first null. We put bytes 0-1 as
+      // [E6, 97] and byte 2 as 0x00. str::from_utf8 on [E6, 97] = invalid.
+      const badTitle = Buffer.alloc(32, 0);
+      badTitle[0] = 0xE6;
+      badTitle[1] = 0x97;
+      // byte 2 is 0x00 — validator stops here, checks [E6, 97] which is invalid
+
+      let errored = false;
+      try {
+        await createPointerV2(program, artist, h, { title: badTitle });
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "InvalidTitle");
+      }
+      assert.isTrue(errored, "truncated multibyte in prefix must be rejected");
+    });
+
+    it("title is NEVER mutated by subsequent instructions (immutability)", async () => {
+      const h = sha256("title-immutable-across-ixs");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      const originalTitle = padTitle("Immortal Title");
+
+      // 1. Create with title set
+      await createPointerV2(program, artist, h, {
+        title: originalTitle,
+        lastSig: Array(64).fill(0),
+      });
+      const [pda] = findPointerPDA(h, program.programId);
+
+      // 2. link_nft doesn't touch title
+      const fakeNft = Keypair.generate().publicKey;
+      await program.methods
+        .linkNft(fakeNft)
+        .accountsPartial({ pointer: pda, inscriber: artist.publicKey })
+        .signers([artist])
+        .rpc();
+      let p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(originalTitle), "title unchanged after link_nft");
+
+      // 3. set_collection doesn't touch title
+      const fakeColl = Keypair.generate().publicKey;
+      await program.methods
+        .setCollection(fakeColl)
+        .accountsPartial({ pointer: pda, inscriber: artist.publicKey })
+        .signers([artist])
+        .rpc();
+      p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(originalTitle), "title unchanged after set_collection");
+
+      // 4. update_last_sig doesn't touch title
+      await callUpdateLastSig(program, artist, h, fakeSig());
+      p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(originalTitle), "title unchanged after update_last_sig");
+
+      // 5. transfer_inscriber doesn't touch title
+      const newInscriber = Keypair.generate();
+      await callTransferInscriber(program, artist, h, newInscriber.publicKey);
+      p = await program.account.pointer.fetch(pda);
+      assert.deepEqual(Array.from(p.title), Array.from(originalTitle), "title unchanged after transfer_inscriber");
+    });
+
+    it("PointerCreatedV2 event actually emits with the correct title bytes (runtime proof)", async () => {
+      // This is a RUNTIME test, not a structural one. We subscribe to the
+      // event stream, fire a create_pointer_v2 with a known title, and assert
+      // the emitted event carries those exact bytes. Catches bugs like:
+      //   - Handler writes title to PDA but forgets to emit in event
+      //   - Handler emits event with title = [0;32] regardless of input
+      //   - Wrong byte ordering in event serialization
+      const h = sha256("title-event-emission-runtime");
+      const artist = Keypair.generate();
+      await airdrop(provider.connection, artist.publicKey);
+
+      const expectedTitle = padTitle("Event Test #1");
+
+      // Subscribe to PointerCreatedV2 events before firing the tx
+      let capturedEvent: any = null;
+      const listenerId = program.addEventListener(
+        "pointerCreatedV2" as any,
+        (event: any) => {
+          // Filter for our specific content hash to avoid cross-test pollution
+          const eventHash = Buffer.from(event.contentHash);
+          if (eventHash.equals(h)) capturedEvent = event;
+        }
+      );
+
+      try {
+        await createPointerV2(program, artist, h, { title: expectedTitle });
+
+        // Events may be delivered async; wait up to 3s for our event
+        const deadline = Date.now() + 3000;
+        while (!capturedEvent && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        assert.isNotNull(capturedEvent, "PointerCreatedV2 event was received");
+        assert.isDefined(capturedEvent.title, "event has title field");
+
+        const emittedTitle = Buffer.from(capturedEvent.title);
+        assert.equal(emittedTitle.length, 32, "emitted title is 32 bytes");
+        assert.deepEqual(
+          Array.from(emittedTitle),
+          Array.from(expectedTitle),
+          "emitted title bytes EXACTLY match what we passed in"
+        );
+
+        // Also verify inscriber + content_hash in the event match what we sent
+        assert.equal(
+          (capturedEvent.inscriber as PublicKey).toBase58(),
+          artist.publicKey.toBase58(),
+          "event.inscriber matches signer"
+        );
+        assert.deepEqual(
+          Array.from(Buffer.from(capturedEvent.contentHash)),
+          Array.from(h),
+          "event.contentHash matches arg"
+        );
+      } finally {
+        await program.removeEventListener(listenerId);
+      }
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 6. TRANSFER_INSCRIBER — hand PDA inscriber role to a new pubkey
+  // ════════════════════════════════════════════════════════════════════════
+  //
+  // Flow this IX enables:
+  //   1. Node (GCP) creates PDA via create_pointer_v2 with inscriber = GCP (so node
+  //      can finalize update_last_sig).
+  //   2. Node finalizes update_last_sig after chunks confirm.
+  //   3. Node calls transfer_inscriber(new_inscriber = user | NFT creator) so the
+  //      work's actual creator ends up owning the PDA.
+  //
+  // After transfer:
+  //   - New inscriber CAN call link_nft + set_collection + update_last_sig + transfer_inscriber
+  //   - Old inscriber CANNOT — rights fully handed off
+  //   - primary_nft + collection remain write-once (set by whoever, locked for everyone)
+  //   - Pubkey::default() as new_inscriber = renounce — no one can ever call gated ixs again
+
+  describe("transfer_inscriber", () => {
+    const tNode = Keypair.generate();        // plays "GCP" — initial inscriber
+    const tCreator = Keypair.generate();     // the user/artist who should own the PDA
+    const tAttacker = Keypair.generate();    // random attacker
+
+    const tHashA = sha256("transfer-happy-path");
+    const tHashB = sha256("transfer-unauthorized");
+    const tHashC = sha256("transfer-rights-follow-the-role");
+    const tHashD = sha256("transfer-renounce");
+    const tHashE = sha256("transfer-self-noop");
+    const tHashF = sha256("transfer-chain");
+
+    before(async () => {
+      await Promise.all([
+        airdrop(provider.connection, tNode.publicKey),
+        airdrop(provider.connection, tCreator.publicKey),
+        airdrop(provider.connection, tAttacker.publicKey),
+      ]);
+    });
+
+    it("happy path: current inscriber transfers to a new pubkey → inscriber field updates + event emits", async () => {
+      // tNode creates a PDA (acts as the node).
+      await createPointerV2(program, tNode, tHashA, {
+        chunkCount: 79, blobSize: 46034, lastSig: Array(64).fill(0),
+      });
+      const [pda] = findPointerPDA(tHashA, program.programId);
+      const before = await program.account.pointer.fetch(pda);
+      assert.equal(before.inscriber.toBase58(), tNode.publicKey.toBase58(), "initial inscriber = tNode");
+
+      // Transfer to tCreator.
+      await callTransferInscriber(program, tNode, tHashA, tCreator.publicKey);
+
+      const after = await program.account.pointer.fetch(pda);
+      assert.equal(after.inscriber.toBase58(), tCreator.publicKey.toBase58(), "inscriber swapped to tCreator");
+      // Other fields untouched.
+      assert.deepEqual(Array.from(after.contentHash), Array.from(tHashA), "content_hash unchanged");
+      assert.equal(after.chunkCount, before.chunkCount, "chunk_count unchanged");
+      assert.equal(after.blobSize, before.blobSize, "blob_size unchanged");
+      assert.equal(after.version, 2, "version byte unchanged");
+    });
+
+    it("non-inscriber rejected: attacker cannot transfer even with own signature", async () => {
+      await createPointerV2(program, tNode, tHashB, {
+        chunkCount: 5, blobSize: 2048, lastSig: Array(64).fill(0),
+      });
+
+      let errored = false;
+      try {
+        // Attacker tries to steal the inscriber role.
+        await callTransferInscriber(program, tAttacker, tHashB, tAttacker.publicKey);
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "NotInscriber", "expected NotInscriber error");
+      }
+      assert.isTrue(errored, "attacker transfer must fail");
+
+      const [pda] = findPointerPDA(tHashB, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.inscriber.toBase58(), tNode.publicKey.toBase58(), "inscriber unchanged after attack");
+    });
+
+    it("rights FOLLOW the role: after transfer, new inscriber CAN link_nft, old inscriber CANNOT", async () => {
+      await createPointerV2(program, tNode, tHashC, {
+        chunkCount: 5, blobSize: 2048, lastSig: Array(64).fill(0),
+      });
+      const [pda] = findPointerPDA(tHashC, program.programId);
+
+      // Before transfer: tNode IS inscriber → can link_nft ✓ (we'll skip verifying this positive case
+      // since the main point is post-transfer behavior).
+
+      // Transfer to tCreator.
+      await callTransferInscriber(program, tNode, tHashC, tCreator.publicKey);
+
+      // After transfer: tNode tries link_nft → must FAIL (NotInscriber).
+      const fakeNft1 = Keypair.generate().publicKey;
+      let oldInscriberRejected = false;
+      try {
+        await program.methods
+          .linkNft(fakeNft1)
+          .accountsPartial({ pointer: pda, inscriber: tNode.publicKey })
+          .signers([tNode])
+          .rpc();
+      } catch (err: any) {
+        oldInscriberRejected = true;
+        assert.include(err.toString(), "NotInscriber", "old inscriber should be rejected");
+      }
+      assert.isTrue(oldInscriberRejected, "old inscriber lost link_nft rights");
+
+      // tCreator tries link_nft → must SUCCEED.
+      const fakeNft2 = Keypair.generate().publicKey;
+      await program.methods
+        .linkNft(fakeNft2)
+        .accountsPartial({ pointer: pda, inscriber: tCreator.publicKey })
+        .signers([tCreator])
+        .rpc();
+
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.primaryNft.toBase58(), fakeNft2.toBase58(), "tCreator successfully linked NFT");
+    });
+
+    it("renounce: transferring to Pubkey::default() makes PDA permanently un-inscriber-ed", async () => {
+      await createPointerV2(program, tNode, tHashD, {
+        chunkCount: 5, blobSize: 2048, lastSig: Array(64).fill(0),
+      });
+      const [pda] = findPointerPDA(tHashD, program.programId);
+
+      // Renounce inscriber rights.
+      await callTransferInscriber(program, tNode, tHashD, PublicKey.default);
+
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.inscriber.toBase58(), PublicKey.default.toBase58(), "inscriber = default (renounced)");
+
+      // tNode can no longer call link_nft (no longer the inscriber).
+      let nodeRejected = false;
+      try {
+        await program.methods
+          .linkNft(Keypair.generate().publicKey)
+          .accountsPartial({ pointer: pda, inscriber: tNode.publicKey })
+          .signers([tNode])
+          .rpc();
+      } catch (err: any) {
+        nodeRejected = true;
+        assert.include(err.toString(), "NotInscriber");
+      }
+      assert.isTrue(nodeRejected, "after renounce, even original inscriber rejected");
+
+      // No one can call transfer_inscriber either (would need signer matching Pubkey::default which is impossible).
+      // The `all-zeros Pubkey` has no corresponding private key, so this PDA's inscriber role is permanently orphaned.
+      // Anchor's inscriber: Signer<'info> constraint requires a real signature; can't be satisfied for Pubkey::default.
+    });
+
+    it("self-transfer: new_inscriber == current inscriber is a logged no-op, not an error", async () => {
+      await createPointerV2(program, tNode, tHashE, {
+        chunkCount: 5, blobSize: 2048, lastSig: Array(64).fill(0),
+      });
+      // Should succeed, emit log "transfer_inscriber: new_inscriber == current; no-op".
+      await callTransferInscriber(program, tNode, tHashE, tNode.publicKey);
+
+      const [pda] = findPointerPDA(tHashE, program.programId);
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.inscriber.toBase58(), tNode.publicKey.toBase58(), "inscriber unchanged (self-transfer)");
+    });
+
+    it("chained transfers: A → B → C works (simulates re-selling a creator's PDA rights)", async () => {
+      await createPointerV2(program, tNode, tHashF, {
+        chunkCount: 5, blobSize: 2048, lastSig: Array(64).fill(0),
+      });
+      const [pda] = findPointerPDA(tHashF, program.programId);
+
+      // tNode → tCreator
+      await callTransferInscriber(program, tNode, tHashF, tCreator.publicKey);
+
+      // tCreator → tAttacker (not really an attack here — valid hand-off from new owner)
+      await callTransferInscriber(program, tCreator, tHashF, tAttacker.publicKey);
+
+      const p = await program.account.pointer.fetch(pda);
+      assert.equal(p.inscriber.toBase58(), tAttacker.publicKey.toBase58(), "final inscriber = tAttacker after chain");
+
+      // tCreator lost rights after second transfer.
+      let creatorRejected = false;
+      try {
+        await callTransferInscriber(program, tCreator, tHashF, tCreator.publicKey);
+      } catch (err: any) {
+        creatorRejected = true;
+        assert.include(err.toString(), "NotInscriber");
+      }
+      assert.isTrue(creatorRejected, "mid-chain holder loses rights after transferring out");
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 7. MIGRATE_POINTER_ACCOUNT — grow legacy-sized PDAs to current layout
+  // ════════════════════════════════════════════════════════════════════════
+  //
+  // This IX grows any under-sized Pointer PDA to 8 + Pointer::INIT_SPACE bytes
+  // via Solana `realloc` with zero-fill. Tests here cover NEGATIVE paths —
+  // the full positive path (migrate an actual 260-byte v1 PDA → 324 bytes,
+  // verify bytes 228-323 are zero-filled, verify subsequent link_nft works)
+  // requires pre-staging a 260-byte account which solana-test-validator
+  // doesn't support easily. That test runs on devnet in Phase 1a.14 against
+  // a pre-seeded fixture account.
+  //
+  // What we CAN test locally:
+  //   (a) rejects when account is already at target size (all our test PDAs are)
+  //   (b) rejects when account is not a Pointer (wrong discriminator)
+  //   (c) requires system_program account for the CPI transfer
+
+  describe("migrate_pointer_account", () => {
+    const mArtist = Keypair.generate();
+    const mPayer = Keypair.generate();
+    const mHash = sha256("migrate-negative-paths");
+
+    before(async () => {
+      await Promise.all([
+        airdrop(provider.connection, mArtist.publicKey),
+        airdrop(provider.connection, mPayer.publicKey),
+      ]);
+    });
+
+    it("REJECTS migration of an already-324-byte account (AlreadyAtTargetSize)", async () => {
+      // Create a fresh v2 PDA — it's already at the current target size of
+      // 8 + Pointer::INIT_SPACE = 324 bytes. Calling migrate on it should
+      // fail with AlreadyAtTargetSize.
+      await createPointerV2(program, mArtist, mHash, {
+        title: padTitle("Already at target"),
+      });
+      const [pda] = findPointerPDA(mHash, program.programId);
+
+      // Confirm pre-state: account is 324 bytes
+      const acctInfo = await provider.connection.getAccountInfo(pda);
+      assert.isNotNull(acctInfo);
+      assert.equal(acctInfo!.data.length, 324, "v2-created account is 324 bytes");
+
+      let errored = false;
+      try {
+        await program.methods
+          .migratePointerAccount()
+          .accountsPartial({
+            pointer: pda,
+            payer: mPayer.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([mPayer])
+          .rpc();
+      } catch (err: any) {
+        errored = true;
+        assert.include(err.toString(), "AlreadyAtTargetSize",
+          `expected AlreadyAtTargetSize, got: ${err.toString().slice(0, 200)}`);
+      }
+      assert.isTrue(errored, "migrate on already-sized account must fail");
+    });
+
+    it("REJECTS migration when account is not a Pointer (discriminator mismatch)", async () => {
+      // Create a system-owned account (wrong owner, wrong discriminator) and
+      // try to migrate it. The IX requires `mut` on the pointer account, but
+      // since we're only going to the discriminator check before any state
+      // mutation, the account ownership doesn't matter for THIS failure mode.
+      //
+      // Instead of constructing a fake 260-byte account, we just pass a
+      // random valid non-Pointer account and confirm the handler rejects it.
+      // But wait — the account must be owned by the program for realloc to
+      // work, and Anchor's #[account(mut)] doesn't enforce ownership. The
+      // handler does a manual discriminator check. Use a random keypair's
+      // system account as the target — it's owned by SystemProgram, not our
+      // program. In this case Anchor/Solana will refuse the realloc itself
+      // with "invalid program for account" before our handler runs, OR our
+      // handler catches the size-too-small / discriminator failure first.
+      //
+      // Simplest reliable test: create a minimal-size account owned by
+      // SystemProgram with no data, expect rejection at floor check.
+      const randomTarget = Keypair.generate();
+      // Fund it so it exists on-chain with 0 data bytes (system-owned).
+      const tx = new Transaction().add(
+        SystemProgram.createAccount({
+          fromPubkey: mPayer.publicKey,
+          newAccountPubkey: randomTarget.publicKey,
+          space: 0,
+          lamports: await provider.connection.getMinimumBalanceForRentExemption(0),
+          programId: SystemProgram.programId,
+        })
+      );
+      await provider.sendAndConfirm(tx, [mPayer, randomTarget]);
+
+      let errored = false;
+      let errMsg = "";
+      try {
+        await program.methods
+          .migratePointerAccount()
+          .accountsPartial({
+            pointer: randomTarget.publicKey,
+            payer: mPayer.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([mPayer])
+          .rpc();
+      } catch (err: any) {
+        errored = true;
+        errMsg = err.toString();
+      }
+      assert.isTrue(errored, "migrate on non-Pointer account must fail");
+      // Any of AccountTooSmall / NotAPointer / solana-level ownership errors
+      // are acceptable — the point is that we do NOT realloc a random account.
+      const acceptable =
+        errMsg.includes("AccountTooSmall") ||
+        errMsg.includes("NotAPointer") ||
+        errMsg.includes("0x64") /* NotAPointer discriminator error code */ ||
+        errMsg.includes("0x65") /* AccountTooSmall discriminator error code */ ||
+        errMsg.includes("AccountOwnedByWrongProgram") ||
+        errMsg.includes("invalid program id") ||
+        errMsg.includes("incorrect program id") ||
+        errMsg.includes("ConstraintMut") ||
+        errMsg.includes("privilege");
+      assert.isTrue(acceptable,
+        `expected a rejection error, got: ${errMsg.slice(0, 400)}`);
+    });
+
+    it("verifies the migrate IX exists in IDL and takes no args (future-proof generic)", async () => {
+      const idl = program.idl;
+      const ix = idl.instructions.find((i: any) =>
+        i.name === "migratePointerAccount" || i.name === "migrate_pointer_account"
+      );
+      assert.isDefined(ix, "migrate_pointer_account IX in IDL");
+      assert.equal((ix as any).args.length, 0,
+        "migrate takes no args — target size is derived from current INIT_SPACE");
+    });
+
+    it("verifies PointerAccountMigrated event is in IDL with old_size + new_size fields", async () => {
+      const idl = program.idl;
+      const ev = idl.events?.find((e: any) =>
+        e.name === "pointerAccountMigrated" || e.name === "PointerAccountMigrated"
+      );
+      assert.isDefined(ev, "PointerAccountMigrated event in IDL");
+
+      const eventTypeName: string = (ev as any).type?.defined?.name || "PointerAccountMigrated";
+      const eventType = idl.types?.find((t: any) =>
+        t.name === eventTypeName || t.name === "pointerAccountMigrated" || t.name === "PointerAccountMigrated"
+      );
+      const fields = (eventType as any)?.type?.fields || (ev as any).fields || [];
+      const fieldNames = fields.map((f: any) => f.name);
+      assert.include(fieldNames, "pda");
+      assert.include(fieldNames, "oldSize" /* camelCase */);
+      assert.include(fieldNames, "newSize");
+    });
+
+    it("verifies AlreadyAtTargetSize + NotAPointer + AccountTooSmall errors are in IDL", async () => {
+      const idl = program.idl;
+      const errNames = (idl.errors || []).map((e: any) => e.name);
+      assert.include(errNames, "alreadyAtTargetSize" /* camelCase in TS */);
+      assert.include(errNames, "notAPointer");
+      assert.include(errNames, "accountTooSmall");
     });
   });
 });

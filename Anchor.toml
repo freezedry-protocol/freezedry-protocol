@@ -10,14 +10,18 @@ freezedry_registry = "6UGJUc28AuCj8a8sjhsVEKbvYHfQECCuJC7i54vk2to"
 freezedry_jobs = "AmqBYKYCqpmKoFcgvripCQ3bJC2d8ygWWhcoHtmTvvzx"
 freezedry_pod = "2hTh2yTcXhxEvz3hFAhGiUNm2eQoEvQvrAn5C1aNkm2W"
 blip_registry = "2YeNzcvHqswJJbxGo6yg1TZ46o7HxUs6fx9bDraE44rP"
-fd_pointer = "6o3g59rNF4VoKS8HtFY9EQP75go6LjETTxFpaENdCmus"
+# fd_pointer MUST match the declare_id! in programs/fd-pointer/src/lib.rs
+# (mainnet ID) or Anchor runtime throws DeclaredProgramIdMismatch.
+fd_pointer = "FrzDrykT4XSp5BwdYdSJdLHbDVVPuquN2cDMJyVJ35iJ"
 
 [programs.devnet]
 freezedry_registry = "6UGJUc28AuCj8a8sjhsVEKbvYHfQECCuJC7i54vk2to"
 freezedry_jobs = "AmqBYKYCqpmKoFcgvripCQ3bJC2d8ygWWhcoHtmTvvzx"
 freezedry_pod = "2hTh2yTcXhxEvz3hFAhGiUNm2eQoEvQvrAn5C1aNkm2W"
 blip_registry = "2YeNzcvHqswJJbxGo6yg1TZ46o7HxUs6fx9bDraE44rP"
-fd_pointer = "6o3g59rNF4VoKS8HtFY9EQP75go6LjETTxFpaENdCmus"
+# Same program ID on all clusters — declare_id is fixed in lib.rs. The previous
+# 6o3g59rN... devnet deploy is orphaned; redeploy at FrzDrykT on devnet as needed.
+fd_pointer = "FrzDrykT4XSp5BwdYdSJdLHbDVVPuquN2cDMJyVJ35iJ"
 
 [programs.mainnet]
 fd_pointer = "FrzDrykT4XSp5BwdYdSJdLHbDVVPuquN2cDMJyVJ35iJ"

@@ -2,6 +2,14 @@
 members = [
     "programs/fd-pointer",
 ]
+exclude = [
+    "programs/blip-registry",
+    "programs/inscription-jobs",
+    "programs/node-registry",
+    "programs/pod",
+    "programs-next/inscription-jobs-v3",
+    "programs-next/node-registry-v2",
+]
 resolver = "2"
 
 [profile.release]

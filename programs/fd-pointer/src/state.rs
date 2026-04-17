@@ -45,12 +45,39 @@ pub struct Pointer {
     /// Set-once mutable: artist sets once, locks forever.
     pub primary_nft: Pubkey,
 
-    /// Schema version for future realloc (starts at 1)
+    /// Schema version for future realloc (v1 = 1, v2 = 2)
     pub version: u8,
 
     /// PDA bump seed
     pub bump: u8,
 
-    /// Reserved for future expansion
-    pub _reserved: [u8; 32],
+    /// Artwork / file title. UTF-8 bytes, right-padded with zeros.
+    /// Partners supply >32-byte input — clients truncate at the last complete
+    /// UTF-8 code-point boundary before calling (no invalid UTF-8 ever lands
+    /// on-chain). Set once at PDA creation via create_pointer_v2; v1 creates
+    /// leave this as zeros. Never mutated by any subsequent instruction.
+    pub title: [u8; 32],
+
+    /// Reserved for future expansion (v3+). 64 bytes = room for two more
+    /// Pubkey-sized fields without another program upgrade.
+    pub _reserved: [u8; 64],
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Compile-time invariants — these fail the build if the struct drifts.
+// Change ANY field size, add/remove ANY field, and these asserts will
+// stop compilation until we explicitly acknowledge the new layout.
+//
+// Paired with Lean proofs in formal_verification/Proofs/FdPointerV2Title.lean
+// (theorem T2a: INIT_SPACE = 316). Both numbers MUST stay in sync with
+// `POINTER_PDA_RENT_LAMPORTS` in hydrate/api/partner.js (3,145,920 lamports).
+//
+// If this assertion fires, you have THREE places to update:
+//   1. This assertion (with the new size + a comment explaining why it changed)
+//   2. Lean proof T2a in formal_verification/Proofs/FdPointerV2Title.lean
+//   3. POINTER_PDA_RENT_LAMPORTS = (new_account_size + 128) × 6960 in partner.js
+// ═══════════════════════════════════════════════════════════════════════
+const _: () = assert!(
+    Pointer::INIT_SPACE == 316,
+    "Pointer struct layout changed — see state.rs comment above this assertion"
+);

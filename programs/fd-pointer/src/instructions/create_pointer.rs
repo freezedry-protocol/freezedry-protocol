@@ -64,7 +64,9 @@ pub fn create_pointer(
     pointer.primary_nft = Pubkey::default();
     pointer.version = 1;
     pointer.bump = ctx.bumps.pointer;
-    pointer._reserved = [0u8; 32];
+    // v1 has no title field — zero-filled for back-compat with v2 struct layout.
+    pointer.title = [0u8; 32];
+    pointer._reserved = [0u8; 64];
 
     emit!(PointerCreated {
         content_hash,

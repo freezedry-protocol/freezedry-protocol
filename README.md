@@ -1,12 +1,12 @@
 # FreezeDry Protocol (FDP)
 
-On-chain art storage for Solana. Preserve any file into a `.hyd` blob, inscribe it permanently in Solana memo transactions, and reconstruct the exact original — bit for bit.
+**The storage layer of Solana.** Store any file directly in memo transactions — permanent, verifiable, and reconstructable from the blockchain alone. Raw bytes become part of the Solana ledger itself, carried forward by every validator.
 
-**Full app**: [freezedry.art](https://freezedry.art) — managed inscriptions, NFT minting, and fast hydration.
+**Live at**: [freezedry.art](https://freezedry.art) — managed inscriptions, NFT minting, and fast hydration.
 
 ## How It Works
 
-Raw file bytes are stored directly on-chain. No lossy compression, no intermediate formats. The original data is preserved exactly as-is, verified by SHA-256 hash.
+Raw file bytes are stored directly on-chain. No lossy compression, no intermediate formats, no external storage. The original data is preserved exactly as-is, verified by SHA-256 hash. The file becomes part of the Solana ledger itself — preserved by the validator network.
 
 ```
 File → Preserve (.hyd) → Shred (585B chunks) → Inscribe (Solana memos) → Hydrate (reconstruct)
